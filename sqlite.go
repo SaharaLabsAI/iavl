@@ -365,9 +365,8 @@ CREATE TABLE root (
 		}
 
 		err = sql.leafWrite.Exec(`
-CREATE TABLE leaf (version int, sequence int, key blob, bytes blob, orphaned bool);
-CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version DESC, sequence);
-CREATE UNIQUE INDEX IF NOT EXISTS leaf_key_idx ON leaf (key, version DESC);
+CREATE TABLE leaf (version int, sequence int, key blob, bytes blob, orphaned bool, PRIMARY KEY (key, version DESC));
+CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);
 CREATE TABLE leaf_orphan (version int, sequence int, at int);
 CREATE INDEX leaf_orphan_idx ON leaf_orphan (at DESC);`)
 		if err != nil {
@@ -1359,9 +1358,6 @@ func (sql *SqliteDb) runAnalyze() error {
 
 	eg.Go(func() error {
 		if err := sql.leafWrite.Exec("ANALYZE leaf_idx;"); err != nil {
-			return fmt.Errorf("failed to analyze tree leaf %s: %w", sql.opts.Path, err)
-		}
-		if err := sql.leafWrite.Exec("ANALYZE leaf_key_idx;"); err != nil {
 			return fmt.Errorf("failed to analyze tree leaf %s: %w", sql.opts.Path, err)
 		}
 		return nil

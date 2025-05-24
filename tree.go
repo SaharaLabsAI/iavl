@@ -1963,10 +1963,6 @@ func (tree *Tree) GetFromRoot(key []byte) ([]byte, error) {
 	return val, err
 }
 
-func (tree *Tree) IteratorLeavesAt(version int64) (Iterator, error) {
-	return tree.IteratorAt(version, nil, nil, true)
-}
-
 func (tree *Tree) Path() string {
 	return tree.sql.opts.Path
 }

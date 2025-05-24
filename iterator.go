@@ -370,10 +370,6 @@ func newIterTree(tree *Tree) *Tree {
 }
 
 func (tree *Tree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err error) {
-	// if tree.immutable {
-	// 	return tree.IteratorAt(tree.version.Load(), start, end, inclusive)
-	// }
-
 	tree.rw.RLock()
 	defer tree.rw.RUnlock()
 
@@ -405,10 +401,6 @@ func (tree *Tree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err
 }
 
 func (tree *Tree) ReverseIterator(start, end []byte) (itr Iterator, err error) {
-	// if tree.immutable {
-	// 	return tree.ReverseIteratorAt(tree.version.Load(), start, end)
-	// }
-
 	tree.rw.RLock()
 	defer tree.rw.RUnlock()
 
@@ -562,54 +554,6 @@ func (i *KVIterator) Close() error {
 		return i.sql.readPool.CloseKVIterstor(i.itrIdx)
 	}
 	return nil
-}
-
-func (tree *Tree) IteratorAt(version int64, start, end []byte, inclusive bool) (Iterator, error) {
-	var err error
-	kvItr := &KVIterator{
-		sql:     tree.sql,
-		start:   start,
-		end:     end,
-		valid:   true,
-		metrics: tree.metricsProxy,
-	}
-
-	kvItr.itrStmt, kvItr.itrIdx, err = tree.sql.getKVIteratorQuery(version, start, end, true, inclusive)
-	if err != nil {
-		return nil, err
-	}
-
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
-	}
-
-	kvItr.Next()
-
-	return kvItr, err
-}
-
-func (tree *Tree) ReverseIteratorAt(version int64, start, end []byte) (Iterator, error) {
-	var err error
-	kvItr := &KVIterator{
-		sql:     tree.sql,
-		start:   start,
-		end:     end,
-		valid:   true,
-		metrics: tree.metricsProxy,
-	}
-
-	kvItr.itrStmt, kvItr.itrIdx, err = tree.sql.getKVIteratorQuery(tree.version.Load(), start, end, false, false)
-	if err != nil {
-		return nil, err
-	}
-
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
-	}
-
-	kvItr.Next()
-
-	return kvItr, nil
 }
 
 func (tree *Tree) IteratorVersionDescLeaves(version int64, limit int) (Iterator, error) {

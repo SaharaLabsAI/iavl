@@ -1316,10 +1316,6 @@ func (sql *SqliteDb) latestRoot() (version int64, err error) {
 	return version, nil
 }
 
-func (sql *SqliteDb) getKVIteratorQuery(version int64, start, end []byte, ascending, inclusive bool) (stmt *gosqlite.Stmt, idx int, err error) {
-	return sql.readPool.GetKVIteratorQuery(version, start, end, ascending, inclusive)
-}
-
 func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
 	conn, err := sql.getReadConn()
 	if err != nil {

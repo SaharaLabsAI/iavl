@@ -7,6 +7,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
+	"lukechampine.com/blake3"
 
 	"github.com/klauspost/compress/s2"
 
@@ -135,7 +136,9 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 			bz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
 		}
 
-		if err = b.leafInsert.Exec(leaf.nodeKey.Version(), int(leaf.nodeKey.Sequence()), leaf.key, bz); err != nil {
+		keyHash := blake3.Sum256(leaf.key)
+
+		if err = b.leafInsert.Exec(leaf.nodeKey.Version(), int(leaf.nodeKey.Sequence()), keyHash[:], bz); err != nil {
 			return 0, err
 		}
 

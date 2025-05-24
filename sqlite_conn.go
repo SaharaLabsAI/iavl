@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/eatonphil/gosqlite"
+	"lukechampine.com/blake3"
 )
 
 type SqliteReadConn struct {
@@ -132,6 +133,8 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 		return nil, fmt.Errorf("get value with key length 0")
 	}
 
+	keyHash := blake3.Sum256(key)
+
 	var err error
 	if c.queryKV == nil {
 		c.queryKV, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE key = ? AND version <= ? ORDER BY version DESC LIMIT 1")
@@ -141,7 +144,7 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 	}
 	defer c.queryKV.Reset()
 
-	if err = c.queryKV.Bind(key, version); err != nil {
+	if err = c.queryKV.Bind(keyHash[:], version); err != nil {
 		return nil, err
 	}
 

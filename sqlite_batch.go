@@ -135,8 +135,14 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 		}
 
 		compressBuf.Reset()
-		encoder.Reset(nil)
-		bz := encoder.EncodeAll(buf.Bytes()[:], compressBuf.Bytes()[:0])
+		encoder.Reset(compressBuf)
+		if _, err := encoder.Write(buf.Bytes()); err != nil {
+			return 0, err
+		}
+		if err := encoder.Close(); err != nil {
+			return 0, err
+		}
+		bz := compressBuf.Bytes()
 
 		keyHash := blake3.Sum256(leaf.key)
 
@@ -240,8 +246,14 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 		}
 
 		compressBuf.Reset()
-		encoder.Reset(nil)
-		bz := encoder.EncodeAll(buf.Bytes()[:], compressBuf.Bytes()[:0])
+		encoder.Reset(compressBuf)
+		if _, err := encoder.Write(buf.Bytes()); err != nil {
+			return 0, err
+		}
+		if err := encoder.Close(); err != nil {
+			return 0, err
+		}
+		bz := compressBuf.Bytes()
 
 		if err = b.treeInsert.Exec(node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz); err != nil {
 			return 0, err

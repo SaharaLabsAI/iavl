@@ -839,7 +839,14 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 		encoder.Reset(nil)
 		defer compress.ZstdEncoderPool.Put(encoder)
 
-		bz := encoder.EncodeAll(buf.Bytes()[:], compressBuf.Bytes()[:0])
+		encoder.Reset(compressBuf)
+		if _, err := encoder.Write(buf.Bytes()); err != nil {
+			return err
+		}
+		if err := encoder.Close(); err != nil {
+			return err
+		}
+		bz := compressBuf.Bytes()
 
 		err = sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version, node_version, node_sequence, bytes) VALUES (?, ?, ?, ?)",
 			version, node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz)

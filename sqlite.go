@@ -10,10 +10,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
-	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/zstd"
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/metrics"
 )
 
@@ -39,17 +40,6 @@ const (
 	Immutable
 	ReadOnly
 )
-
-var (
-	DisableS2Compression   = "1"
-	isDisableS2Compression = true
-)
-
-func init() {
-	if DisableS2Compression == "1" {
-		isDisableS2Compression = true
-	}
-}
 
 type SqliteDbOptions struct {
 	Path          string
@@ -841,14 +831,15 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 			return err
 		}
 
-		bz := buf.Bytes()
-		if !isDisableS2Compression {
-			compressBuf := bufPool.Get().(*bytes.Buffer)
-			compressBuf.Reset()
-			defer bufPool.Put(compressBuf)
+		compressBuf := bufPool.Get().(*bytes.Buffer)
+		compressBuf.Reset()
+		defer bufPool.Put(compressBuf)
 
-			bz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-		}
+		encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+		encoder.Reset(nil)
+		defer compress.ZstdEncoderPool.Put(encoder)
+
+		bz := encoder.EncodeAll(buf.Bytes()[:], compressBuf.Bytes()[:0])
 
 		err = sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version, node_version, node_sequence, bytes) VALUES (?, ?, ?, ?)",
 			version, node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz)

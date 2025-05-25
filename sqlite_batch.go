@@ -9,8 +9,9 @@ import (
 	"github.com/eatonphil/gosqlite"
 	"lukechampine.com/blake3"
 
-	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/zstd"
 
+	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/metrics"
 )
 
@@ -108,6 +109,9 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 	compressBuf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(compressBuf)
 
+	encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+	defer compress.ZstdEncoderPool.Put(encoder)
+
 	err := b.newChangeLogBatch()
 	if err != nil {
 		return 0, err
@@ -130,11 +134,9 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 			return 0, err
 		}
 
-		bz := buf.Bytes()
-		if !isDisableS2Compression {
-			compressBuf.Reset()
-			bz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-		}
+		compressBuf.Reset()
+		encoder.Reset(nil)
+		bz := encoder.EncodeAll(buf.Bytes()[:], compressBuf.Bytes()[:0])
 
 		keyHash := blake3.Sum256(leaf.key)
 
@@ -213,6 +215,9 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 	compressBuf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(compressBuf)
 
+	encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+	defer compress.ZstdEncoderPool.Put(encoder)
+
 	if err = b.newTreeBatch(shardID); err != nil {
 		return 0, err
 	}
@@ -234,11 +239,9 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 			return 0, err
 		}
 
-		bz := buf.Bytes()
-		if !isDisableS2Compression {
-			compressBuf.Reset()
-			bz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-		}
+		compressBuf.Reset()
+		encoder.Reset(nil)
+		bz := encoder.EncodeAll(buf.Bytes()[:], compressBuf.Bytes()[:0])
 
 		if err = b.treeInsert.Exec(node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz); err != nil {
 			return 0, err

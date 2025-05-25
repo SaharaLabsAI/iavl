@@ -12,9 +12,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
-	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/zstd"
 	api "github.com/kocubinski/costor-api"
 	"github.com/kocubinski/costor-api/logz"
+
+	"github.com/cosmos/iavl/v2/compress"
 )
 
 type sqliteSnapshot struct {
@@ -190,11 +192,13 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 				return nil, err
 			}
 
-			nodeBz := buf.Bytes()
-			if !isDisableS2Compression {
-				compressBuf.Reset()
-				nodeBz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-			}
+			encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+			encoder.Reset(nil)
+			defer compress.ZstdEncoderPool.Put(encoder)
+
+			compressBuf.Reset()
+			nodeBz := encoder.EncodeAll(buf.Bytes(), compressBuf.Bytes()[:0])
+
 			if err = insert.Exec(ordinal, snapshotNode.Version, ordinal, nodeBz); err != nil {
 				return nil, err
 			}
@@ -226,11 +230,13 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 			return nil, err
 		}
 
-		nodeBz := buf.Bytes()
-		if !isDisableS2Compression {
-			compressBuf.Reset()
-			nodeBz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-		}
+		encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+		encoder.Reset(nil)
+		defer compress.ZstdEncoderPool.Put(encoder)
+
+		compressBuf.Reset()
+		nodeBz := encoder.EncodeAll(buf.Bytes(), compressBuf.Bytes()[:0])
+
 		if err = insert.Exec(ordinal, snapshotNode.Version, ordinal, nodeBz); err != nil {
 			return nil, err
 		}
@@ -471,10 +477,11 @@ func (snap *sqliteSnapshot) writeStep(node *Node) error {
 		return err
 	}
 
-	nodeBz := buf.Bytes()
-	if !isDisableS2Compression {
-		nodeBz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-	}
+	encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+	encoder.Reset(nil)
+	defer compress.ZstdEncoderPool.Put(encoder)
+
+	nodeBz := encoder.EncodeAll(buf.Bytes(), compressBuf.Bytes()[:0])
 
 	err = snap.snapshotInsert.Exec(snap.ordinal, node.nodeKey.Version(), int(node.nodeKey.Sequence()), nodeBz)
 	if err != nil {
@@ -735,10 +742,12 @@ func (snap *sqliteSnapshot) writeSnapNode(node *Node, version int64, ordinal, se
 		return err
 	}
 
-	nodeBz := buf.Bytes()
-	if !isDisableS2Compression {
-		nodeBz = s2.Encode(compressBuf.Bytes(), buf.Bytes())
-	}
+	encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+	encoder.Reset(nil)
+	defer compress.ZstdEncoderPool.Put(encoder)
+
+	nodeBz := encoder.EncodeAll(buf.Bytes(), compressBuf.Bytes()[:0])
+
 	if err = snap.snapshotInsert.Exec(ordinal, version, sequence, nodeBz); err != nil {
 		return err
 	}

@@ -12,8 +12,9 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/zstd"
 
+	"github.com/cosmos/iavl/v2/compress"
 	encoding "github.com/cosmos/iavl/v2/internal"
 )
 
@@ -573,16 +574,17 @@ func EncodeBytes(w io.Writer, bz []byte) error {
 
 // MakeNode constructs a *Node from an encoded byte slice.
 func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
-	if !isDisableS2Compression {
-		decBuf := bufPool.Get().(*bytes.Buffer)
-		decBuf.Reset()
-		defer bufPool.Put(decBuf)
+	decBuf := bufPool.Get().(*bytes.Buffer)
+	decBuf.Reset()
+	defer bufPool.Put(decBuf)
 
-		var err error
-		buf, err = s2.Decode(decBuf.Bytes(), buf)
-		if err != nil {
-			return nil, err
-		}
+	decoder := compress.ZstdDecoderPool.Get().(*zstd.Decoder)
+	decoder.Reset(nil)
+	defer compress.ZstdDecoderPool.Put(decoder)
+
+	buf, err := decoder.DecodeAll(buf, decBuf.Bytes()[:0])
+	if err != nil {
+		return nil, err
 	}
 
 	// Read node header (height, size, version, key).
@@ -750,16 +752,17 @@ func NewImportNode(key, value []byte, version int64, height int8) *Node {
 }
 
 func extractValue(buf []byte) ([]byte, error) {
-	if !isDisableS2Compression {
-		decBuf := bufPool.Get().(*bytes.Buffer)
-		decBuf.Reset()
-		defer bufPool.Put(decBuf)
+	decBuf := bufPool.Get().(*bytes.Buffer)
+	decBuf.Reset()
+	defer bufPool.Put(decBuf)
 
-		var err error
-		buf, err = s2.Decode(decBuf.Bytes(), buf)
-		if err != nil {
-			return nil, err
-		}
+	decoder := compress.ZstdDecoderPool.Get().(*zstd.Decoder)
+	decoder.Reset(nil)
+	defer compress.ZstdDecoderPool.Put(decoder)
+
+	buf, err := decoder.DecodeAll(buf, decBuf.Bytes()[:0])
+	if err != nil {
+		return nil, err
 	}
 
 	// Read node header (height, size, version, key).

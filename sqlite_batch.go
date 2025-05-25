@@ -3,6 +3,8 @@ package iavl
 import (
 	"bytes"
 	"fmt"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -96,6 +98,221 @@ func (b *sqliteBatch) treeMaybeCommit(_shardID int64) (err error) {
 	return nil
 }
 
+// CompressedLeafData holds the compressed data for a leaf node
+type CompressedLeafData struct {
+	version    int64
+	sequence   int
+	keyHash    []byte
+	compressed []byte
+	index      int
+	err        error
+}
+
+// CompressedBranchData holds the compressed data for a branch node
+type CompressedBranchData struct {
+	version    int64
+	sequence   int
+	compressed []byte
+	index      int
+	err        error
+}
+
+// parallelCompressLeaves compresses all leaves in parallel
+func (b *sqliteBatch) parallelCompressLeaves(leaves []*Node) ([]CompressedLeafData, error) {
+	numWorkers := runtime.GOMAXPROCS(0)
+	if numWorkers > len(leaves) {
+		numWorkers = len(leaves)
+	}
+	if numWorkers == 0 {
+		numWorkers = 1
+	}
+
+	input := make(chan struct {
+		leaf  *Node
+		index int
+	}, len(leaves))
+	output := make(chan CompressedLeafData, len(leaves))
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			buf := bufPool.Get().(*bytes.Buffer)
+			defer bufPool.Put(buf)
+
+			compressBuf := bufPool.Get().(*bytes.Buffer)
+			defer bufPool.Put(compressBuf)
+
+			encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+			defer compress.ZstdEncoderPool.Put(encoder)
+
+			for work := range input {
+				leaf := work.leaf
+				index := work.index
+
+				buf.Reset()
+				err := leaf.BytesWithBuffer(buf)
+				if err != nil {
+					output <- CompressedLeafData{index: index, err: err}
+					continue
+				}
+
+				compressBuf.Reset()
+				encoder.Reset(compressBuf)
+				if _, err := encoder.Write(buf.Bytes()); err != nil {
+					output <- CompressedLeafData{index: index, err: err}
+					continue
+				}
+				if err := encoder.Close(); err != nil {
+					output <- CompressedLeafData{index: index, err: err}
+					continue
+				}
+
+				keyHash := blake3.Sum256(leaf.key)
+				compressedData := make([]byte, len(compressBuf.Bytes()))
+				copy(compressedData, compressBuf.Bytes())
+
+				output <- CompressedLeafData{
+					version:    leaf.nodeKey.Version(),
+					sequence:   int(leaf.nodeKey.Sequence()),
+					keyHash:    keyHash[:],
+					compressed: compressedData,
+					index:      index,
+					err:        nil,
+				}
+			}
+		}()
+	}
+
+	// Send work
+	go func() {
+		defer close(input)
+		for i, leaf := range leaves {
+			input <- struct {
+				leaf  *Node
+				index int
+			}{leaf: leaf, index: i}
+		}
+	}()
+
+	// Collect results
+	results := make([]CompressedLeafData, len(leaves))
+	for i := 0; i < len(leaves); i++ {
+		result := <-output
+		if result.err != nil {
+			// Wait for all workers to finish before returning error
+			wg.Wait()
+			return nil, result.err
+		}
+		results[result.index] = result
+	}
+
+	wg.Wait()
+	close(output)
+
+	return results, nil
+}
+
+// parallelCompressBranches compresses all branches in parallel
+func (b *sqliteBatch) parallelCompressBranches(branches []*Node) ([]CompressedBranchData, error) {
+	numWorkers := runtime.GOMAXPROCS(0)
+	if numWorkers > len(branches) {
+		numWorkers = len(branches)
+	}
+	if numWorkers == 0 {
+		numWorkers = 1
+	}
+
+	input := make(chan struct {
+		branch *Node
+		index  int
+	}, len(branches))
+	output := make(chan CompressedBranchData, len(branches))
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			buf := bufPool.Get().(*bytes.Buffer)
+			defer bufPool.Put(buf)
+
+			compressBuf := bufPool.Get().(*bytes.Buffer)
+			defer bufPool.Put(compressBuf)
+
+			encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
+			defer compress.ZstdEncoderPool.Put(encoder)
+
+			for work := range input {
+				branch := work.branch
+				index := work.index
+
+				buf.Reset()
+				err := branch.BytesWithBuffer(buf)
+				if err != nil {
+					output <- CompressedBranchData{index: index, err: err}
+					continue
+				}
+
+				compressBuf.Reset()
+				encoder.Reset(compressBuf)
+				if _, err := encoder.Write(buf.Bytes()); err != nil {
+					output <- CompressedBranchData{index: index, err: err}
+					continue
+				}
+				if err := encoder.Close(); err != nil {
+					output <- CompressedBranchData{index: index, err: err}
+					continue
+				}
+
+				compressedData := make([]byte, len(compressBuf.Bytes()))
+				copy(compressedData, compressBuf.Bytes())
+
+				output <- CompressedBranchData{
+					version:    branch.nodeKey.Version(),
+					sequence:   int(branch.nodeKey.Sequence()),
+					compressed: compressedData,
+					index:      index,
+					err:        nil,
+				}
+			}
+		}()
+	}
+
+	// Send work
+	go func() {
+		defer close(input)
+		for i, branch := range branches {
+			input <- struct {
+				branch *Node
+				index  int
+			}{branch: branch, index: i}
+		}
+	}()
+
+	// Collect results
+	results := make([]CompressedBranchData, len(branches))
+	for i := 0; i < len(branches); i++ {
+		result := <-output
+		if result.err != nil {
+			// Wait for all workers to finish before returning error
+			wg.Wait()
+			return nil, result.err
+		}
+		results[result.index] = result
+	}
+
+	wg.Wait()
+	close(output)
+
+	return results, nil
+}
+
 func (b *sqliteBatch) saveLeaves() (int64, error) {
 	b.leafInsert = b.sql.leafInsert
 	b.leafOrphan = b.sql.leafOrphan
@@ -103,16 +320,12 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 
 	tree := b.tree
 
-	buf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(buf)
+	compressedLeaves, err := b.parallelCompressLeaves(tree.leaves)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compress leaves: %w", err)
+	}
 
-	compressBuf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(compressBuf)
-
-	encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
-	defer compress.ZstdEncoderPool.Put(encoder)
-
-	err := b.newChangeLogBatch()
+	err = b.newChangeLogBatch()
 	if err != nil {
 		return 0, err
 	}
@@ -126,27 +339,10 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 		}
 	}()
 
-	for i, leaf := range tree.leaves {
+	for i, leaf := range compressedLeaves {
 		b.leafCount++
 
-		buf.Reset()
-		if err := leaf.BytesWithBuffer(buf); err != nil {
-			return 0, err
-		}
-
-		compressBuf.Reset()
-		encoder.Reset(compressBuf)
-		if _, err := encoder.Write(buf.Bytes()); err != nil {
-			return 0, err
-		}
-		if err := encoder.Close(); err != nil {
-			return 0, err
-		}
-		bz := compressBuf.Bytes()
-
-		keyHash := blake3.Sum256(leaf.key)
-
-		if err = b.leafInsert.Exec(leaf.nodeKey.Version(), int(leaf.nodeKey.Sequence()), keyHash[:], bz); err != nil {
+		if err = b.leafInsert.Exec(leaf.version, leaf.sequence, leaf.keyHash, leaf.compressed); err != nil {
 			return 0, err
 		}
 
@@ -155,6 +351,7 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 		}
 
 		if tree.heightFilter > 0 {
+			leaf := tree.leaves[i]
 			if i != 0 {
 				// evict leaf
 				tree.returnNode(leaf)
@@ -215,14 +412,10 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 	b.logger.Debug(fmt.Sprintf("save branches db=tree version=%d shard=%d orphans=%s",
 		tree.version.Load(), shardID, humanize.Comma(int64(len(tree.branchOrphans)))))
 
-	buf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(buf)
-
-	compressBuf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(compressBuf)
-
-	encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
-	defer compress.ZstdEncoderPool.Put(encoder)
+	compressedBranches, err := b.parallelCompressBranches(tree.branches)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compress branches: %w", err)
+	}
 
 	if err = b.newTreeBatch(shardID); err != nil {
 		return 0, err
@@ -237,25 +430,10 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 		}
 	}()
 
-	for _, node := range tree.branches {
+	for i, branch := range compressedBranches {
 		b.treeCount++
 
-		buf.Reset()
-		if err := node.BytesWithBuffer(buf); err != nil {
-			return 0, err
-		}
-
-		compressBuf.Reset()
-		encoder.Reset(compressBuf)
-		if _, err := encoder.Write(buf.Bytes()); err != nil {
-			return 0, err
-		}
-		if err := encoder.Close(); err != nil {
-			return 0, err
-		}
-		bz := compressBuf.Bytes()
-
-		if err = b.treeInsert.Exec(node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz); err != nil {
+		if err = b.treeInsert.Exec(branch.version, branch.sequence, branch.compressed); err != nil {
 			return 0, err
 		}
 
@@ -263,6 +441,7 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 			return 0, err
 		}
 
+		node := tree.branches[i]
 		node.dirty = false
 
 		if node.evict {

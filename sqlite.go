@@ -10,7 +10,6 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
-	"github.com/klauspost/compress/zstd"
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
@@ -832,13 +831,12 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 		}
 
 		compressBuf := bufPool.Get().(*bytes.Buffer)
-		compressBuf.Reset()
 		defer bufPool.Put(compressBuf)
 
-		encoder := compress.ZstdEncoderPool.Get().(*zstd.Encoder)
-		encoder.Reset(nil)
-		defer compress.ZstdEncoderPool.Put(encoder)
+		encoder := compress.S2EncoderPool.Get().(compress.Encoder)
+		defer compress.S2EncoderPool.Put(encoder)
 
+		compressBuf.Reset()
 		encoder.Reset(compressBuf)
 		if _, err := encoder.Write(buf.Bytes()); err != nil {
 			return err

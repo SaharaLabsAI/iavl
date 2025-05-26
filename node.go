@@ -12,8 +12,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/klauspost/compress/zstd"
-
 	"github.com/cosmos/iavl/v2/compress"
 	encoding "github.com/cosmos/iavl/v2/internal"
 )
@@ -575,17 +573,18 @@ func EncodeBytes(w io.Writer, bz []byte) error {
 // MakeNode constructs a *Node from an encoded byte slice.
 func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
 	decBuf := bufPool.Get().(*bytes.Buffer)
-	decBuf.Reset()
 	defer bufPool.Put(decBuf)
 
-	decoder := compress.ZstdDecoderPool.Get().(*zstd.Decoder)
-	decoder.Reset(nil)
-	defer compress.ZstdDecoderPool.Put(decoder)
+	decoder := compress.S2DecoderPool.Get().(compress.Decoder)
+	defer compress.S2DecoderPool.Put(decoder)
 
-	buf, err := decoder.DecodeAll(buf, decBuf.Bytes()[:0])
+	decBuf.Reset()
+	decoder.Reset(bytes.NewBuffer(buf))
+	_, err := io.Copy(decBuf, decoder)
 	if err != nil {
 		return nil, err
 	}
+	buf = decBuf.Bytes()
 
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)
@@ -645,6 +644,7 @@ func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
 		node.leftNodeKey = *leftNk
 		node.rightNodeKey = *rightNk
 	}
+
 	return node, nil
 }
 
@@ -753,17 +753,18 @@ func NewImportNode(key, value []byte, version int64, height int8) *Node {
 
 func extractValue(buf []byte) ([]byte, error) {
 	decBuf := bufPool.Get().(*bytes.Buffer)
-	decBuf.Reset()
 	defer bufPool.Put(decBuf)
 
-	decoder := compress.ZstdDecoderPool.Get().(*zstd.Decoder)
-	decoder.Reset(nil)
-	defer compress.ZstdDecoderPool.Put(decoder)
+	decoder := compress.S2DecoderPool.Get().(compress.Decoder)
+	defer compress.S2DecoderPool.Put(decoder)
 
-	buf, err := decoder.DecodeAll(buf, decBuf.Bytes()[:0])
+	decBuf.Reset()
+	decoder.Reset(bytes.NewBuffer(buf))
+	_, err := io.Copy(decBuf, decoder)
 	if err != nil {
 		return nil, err
 	}
+	buf = decBuf.Bytes()
 
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)

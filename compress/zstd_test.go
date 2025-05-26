@@ -1,6 +1,8 @@
 package compress
 
 import (
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
@@ -25,4 +27,11 @@ func TestZstdCompress(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, source, out)
+
+	var out2 bytes.Buffer
+	d.Reset(bytes.NewBuffer(delta))
+	_, err = io.Copy(&out2, d)
+	require.NoError(t, err)
+
+	require.Equal(t, source, out2.Bytes())
 }

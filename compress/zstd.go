@@ -7,6 +7,11 @@ import (
 )
 
 var (
+	_ Encoder = &zstd.Encoder{}
+	_ Decoder = &zstd.Decoder{}
+)
+
+var (
 	compressLevel   = zstd.WithEncoderLevel(zstd.SpeedFastest)
 	memoryOptimized = zstd.WithLowerEncoderMem(true)
 	windowSize      = zstd.WithWindowSize(64 * 1024)

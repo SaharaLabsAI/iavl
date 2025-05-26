@@ -13,8 +13,8 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/metrics"
+	"github.com/cosmos/iavl/v2/pool"
 )
 
 const defaultSQLitePath = "/tmp/iavl2"
@@ -833,8 +833,8 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 		compressBuf := bufPool.Get().(*bytes.Buffer)
 		defer bufPool.Put(compressBuf)
 
-		encoder := compress.S2EncoderPool.Get().(compress.Encoder)
-		defer compress.S2EncoderPool.Put(encoder)
+		encoder := pool.Compress{}.GetEncoder()
+		defer pool.Compress{}.PutEncoder(encoder)
 
 		compressBuf.Reset()
 		encoder.Reset(compressBuf)

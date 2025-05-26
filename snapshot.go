@@ -15,7 +15,7 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"github.com/kocubinski/costor-api/logz"
 
-	"github.com/cosmos/iavl/v2/compress"
+	"github.com/cosmos/iavl/v2/pool"
 )
 
 type sqliteSnapshot struct {
@@ -191,8 +191,8 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 				return nil, err
 			}
 
-			encoder := compress.S2EncoderPool.Get().(compress.Encoder)
-			defer compress.S2EncoderPool.Put(encoder)
+			encoder := pool.Compress{}.GetEncoder()
+			defer pool.Compress{}.PutEncoder(encoder)
 
 			compressBuf.Reset()
 			encoder.Reset(compressBuf)
@@ -235,8 +235,8 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 			return nil, err
 		}
 
-		encoder := compress.S2EncoderPool.Get().(compress.Encoder)
-		defer compress.S2EncoderPool.Put(encoder)
+		encoder := pool.Compress{}.GetEncoder()
+		defer pool.Compress{}.PutEncoder(encoder)
 
 		compressBuf.Reset()
 		encoder.Reset(compressBuf)
@@ -488,8 +488,8 @@ func (snap *sqliteSnapshot) writeStep(node *Node) error {
 		return err
 	}
 
-	encoder := compress.S2EncoderPool.Get().(compress.Encoder)
-	defer compress.S2EncoderPool.Put(encoder)
+	encoder := pool.Compress{}.GetEncoder()
+	defer pool.Compress{}.PutEncoder(encoder)
 
 	compressBuf.Reset()
 	encoder.Reset(compressBuf)
@@ -760,8 +760,8 @@ func (snap *sqliteSnapshot) writeSnapNode(node *Node, version int64, ordinal, se
 		return err
 	}
 
-	encoder := compress.S2EncoderPool.Get().(compress.Encoder)
-	defer compress.S2EncoderPool.Put(encoder)
+	encoder := pool.Compress{}.GetEncoder()
+	defer pool.Compress{}.PutEncoder(encoder)
 
 	compressBuf.Reset()
 	encoder.Reset(compressBuf)

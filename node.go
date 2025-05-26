@@ -12,8 +12,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/cosmos/iavl/v2/compress"
 	encoding "github.com/cosmos/iavl/v2/internal"
+	ipool "github.com/cosmos/iavl/v2/pool"
 )
 
 const hashSize = 32
@@ -575,8 +575,8 @@ func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
 	decBuf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(decBuf)
 
-	decoder := compress.S2DecoderPool.Get().(compress.Decoder)
-	defer compress.S2DecoderPool.Put(decoder)
+	decoder := ipool.Compress{}.GetDecoder()
+	defer ipool.Compress{}.PutDecoder(decoder)
 
 	decBuf.Reset()
 	decoder.Reset(bytes.NewBuffer(buf))
@@ -755,8 +755,8 @@ func extractValue(buf []byte) ([]byte, error) {
 	decBuf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(decBuf)
 
-	decoder := compress.S2DecoderPool.Get().(compress.Decoder)
-	defer compress.S2DecoderPool.Put(decoder)
+	decoder := ipool.Compress{}.GetDecoder()
+	defer ipool.Compress{}.PutDecoder(decoder)
 
 	decBuf.Reset()
 	decoder.Reset(bytes.NewBuffer(buf))

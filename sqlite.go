@@ -250,7 +250,7 @@ func NewSqliteDb(pool *NodePool, opts SqliteDbOptions) (*SqliteDb, error) {
 		return nil, err
 	}
 
-	if err = sql.init(); err != nil {
+	if err = sql.createTableIfNotExists(); err != nil {
 		return nil, err
 	}
 
@@ -282,7 +282,7 @@ func NewSqliteDb(pool *NodePool, opts SqliteDbOptions) (*SqliteDb, error) {
 	return sql, nil
 }
 
-func (sql *SqliteDb) init() error {
+func (sql *SqliteDb) createTableIfNotExists() error {
 	q, err := sql.treeWrite.Prepare("SELECT name from sqlite_master WHERE type='table' AND name='root'")
 	if err != nil {
 		return err
@@ -310,18 +310,13 @@ func (sql *SqliteDb) init() error {
 		err = sql.treeWrite.Exec(`
 CREATE TABLE orphan (version int, sequence int, at int);
 CREATE INDEX orphan_idx ON orphan (at DESC);
-CREATE TABLE root (
-	version int, 
-	node_version int, 
-	node_sequence int, 
-	bytes blob, 
-	PRIMARY KEY (version))`)
+CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob, PRIMARY KEY (version))`)
 		if err != nil {
 			return err
 		}
 
 		sql.logger.Info(fmt.Sprintf("creating shard %d", defaultShardID))
-		err := sql.treeWrite.Exec(fmt.Sprintf("CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool, PRIMARY KEY (version, sequence));", defaultShardID))
+		err := sql.treeWrite.Exec(fmt.Sprintf("CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool, PRIMARY KEY (version, sequence)) WITHOUT ROWID;", defaultShardID))
 		if err != nil {
 			return err
 		}
@@ -349,6 +344,8 @@ CREATE TABLE root (
 			return err
 		}
 
+		// NOTE: we need leaf_idx, so we cannot use `WITHOUT ROWID` because leaf_idx must store the full PRIMARY KEY
+		// as their row reference
 		err = sql.leafWrite.Exec(`
 CREATE TABLE leaf (version int, sequence int, key blob, bytes blob, orphaned bool, PRIMARY KEY (key, version DESC));
 CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);

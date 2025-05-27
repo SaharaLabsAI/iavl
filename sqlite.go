@@ -1363,21 +1363,8 @@ func (sql *SqliteDb) runOptimize() error {
 		sql.logger.Warn(fmt.Sprintf("tree %s indexes optimized, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
 	}()
 
-	eg := errgroup.Group{}
-	eg.SetLimit(2)
-
-	eg.Go(func() error {
-		if err := sql.leafWrite.Exec("PRAGMA optimize('leaf_idx');"); err != nil {
-			return fmt.Errorf("failed to optimize tree leaf %s: %w", sql.opts.Path, err)
-		}
-		if err := sql.leafWrite.Exec("PRAGMA optimize('leaf_key_idx');"); err != nil {
-			return fmt.Errorf("failed to optimize tree leaf %s: %w", sql.opts.Path, err)
-		}
-		return nil
-	})
-
-	if err := eg.Wait(); err != nil {
-		return err
+	if err := sql.leafWrite.Exec("PRAGMA optimize('leaf_idx');"); err != nil {
+		return fmt.Errorf("failed to optimize tree leaf %s: %w", sql.opts.Path, err)
 	}
 
 	sql.logger.Info(fmt.Sprintf("tree %s indexes optimized", sql.opts.Path))

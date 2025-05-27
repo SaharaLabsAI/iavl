@@ -15,7 +15,7 @@ var (
 var (
 	S2EncoderPool = &sync.Pool{
 		New: func() any {
-			w := s2.NewWriter(nil, s2.WriterBetterCompression())
+			w := s2.NewWriter(nil, s2.WriterBetterCompression(), s2.WriterBlockSize(256*1024))
 			return w
 		},
 	}

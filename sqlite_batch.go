@@ -44,14 +44,14 @@ func (b *sqliteBatch) newChangeLogBatch() (err error) {
 
 func (b *sqliteBatch) changelogMaybeCommit() (err error) {
 	if b.leafCount%b.size == 0 {
-		if err = b.changelogBatchCommit(); err != nil {
+		if err = b.changelogBatchCommitBegin(); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (b *sqliteBatch) changelogBatchCommit() error {
+func (b *sqliteBatch) changelogBatchCommitBegin() error {
 	return b.sql.leafWrite.Exec("Commit; Begin")
 }
 
@@ -68,7 +68,7 @@ func (b *sqliteBatch) newTreeBatch(shardID int64) (err error) {
 	return err
 }
 
-func (b *sqliteBatch) treeBatchCommit() error {
+func (b *sqliteBatch) treeBatchCommitBegin() error {
 	if err := b.sql.treeWrite.Exec("Commit; Begin"); err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (b *sqliteBatch) treeBatchCommit() error {
 
 func (b *sqliteBatch) treeMaybeCommit(_shardID int64) (err error) {
 	if b.treeCount%b.size == 0 {
-		if err = b.treeBatchCommit(); err != nil {
+		if err = b.treeBatchCommitBegin(); err != nil {
 			return err
 		}
 	}
@@ -385,7 +385,7 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 		}
 	}
 
-	if err = b.changelogBatchCommit(); err != nil {
+	if err = b.changelogBatchCommitBegin(); err != nil {
 		return 0, err
 	}
 
@@ -471,7 +471,7 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 		}
 	}
 
-	if err = b.treeBatchCommit(); err != nil {
+	if err = b.treeBatchCommitBegin(); err != nil {
 		return 0, err
 	}
 

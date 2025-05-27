@@ -82,7 +82,6 @@ func (w *sqlWriter) start(ctx context.Context) {
 
 		err := w.treeLoop(ctx)
 		if err != nil {
-			fmt.Printf("tree loop failed %s\n", err.Error())
 			w.logger.Error("tree loop failed", "error", err)
 			os.Exit(1)
 		}
@@ -95,7 +94,6 @@ func (w *sqlWriter) start(ctx context.Context) {
 
 		err := w.leafLoop(ctx)
 		if err != nil {
-			fmt.Printf("leaf loop failed %s\n", err.Error())
 			w.logger.Error("leaf loop failed", "error", err)
 			os.Exit(1)
 		}
@@ -274,12 +272,15 @@ func (w *sqlWriter) leafLoop(ctx context.Context) error {
 	saveLeaves := func(sig *saveSignal) {
 		res := &saveResult{}
 		res.n, res.err = sig.batch.saveLeaves()
+
 		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
 			w.logger.Error("failed leaf wal_checkpoint", "error", err)
 		}
+
 		if err := w.sql.leafWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {
-			res.err = fmt.Errorf("failed leaf incremental vacuum; %w", err)
+			w.logger.Error("failed leaf incremental vacuum", "error", err)
 		}
+
 		w.leafResult <- res
 	}
 	for {
@@ -511,20 +512,27 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 	}
 	saveTree := func(sig *saveSignal) {
 		res := &saveResult{}
+		defer func() {
+			w.treeResult <- res
+		}()
+
 		res.n, res.err = sig.batch.saveBranches()
-		if res.err == nil {
-			err := w.sql.SaveRoot(sig.version, sig.root)
-			if err != nil {
-				res.err = fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.version, err)
-			}
+		if res.err != nil {
+			return
 		}
+
+		if err := w.sql.SaveRoot(sig.version, sig.root); err != nil {
+			res.err = fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.version, err)
+			return
+		}
+
 		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
-			res.err = fmt.Errorf("failed tree checkpoint; %w", err)
+			w.logger.Error("failed tree checkpoint; %w", err)
 		}
+
 		if err := w.sql.treeWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {
-			res.err = fmt.Errorf("failed tree incremental vacuum; %w", err)
+			w.logger.Error("failed tree incremental vacuum", "error", err)
 		}
-		w.treeResult <- res
 	}
 	for {
 		select {

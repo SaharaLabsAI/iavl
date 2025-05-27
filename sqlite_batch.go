@@ -479,11 +479,5 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 		return 0, err
 	}
 
-	err = b.sql.treeWrite.Exec(fmt.Sprintf(
-		"CREATE INDEX IF NOT EXISTS tree_idx_%d ON tree_%d (version, sequence);", shardID, shardID))
-	if err != nil {
-		return 0, err
-	}
-
 	return b.treeCount, nil
 }

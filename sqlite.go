@@ -321,11 +321,7 @@ CREATE TABLE root (
 		}
 
 		sql.logger.Info(fmt.Sprintf("creating shard %d", defaultShardID))
-		err := sql.treeWrite.Exec(fmt.Sprintf("CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool);", defaultShardID))
-		if err != nil {
-			return err
-		}
-		err = sql.treeWrite.Exec(fmt.Sprintf("CREATE INDEX tree_idx_%d ON tree_%d (version, sequence);", defaultShardID, defaultShardID))
+		err := sql.treeWrite.Exec(fmt.Sprintf("CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool, PRIMARY KEY (version, sequence));", defaultShardID))
 		if err != nil {
 			return err
 		}
@@ -509,8 +505,11 @@ func (sql *SqliteDb) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
+
+	// Every time we mutate node during balance/set/remove, touched branch nodes will always get new node key.
+	// But Test_Replay will try to ingest nodes so we should allow REPLACE here.
 	sql.treeInsert, err = sql.treeWrite.Prepare(fmt.Sprintf(
-		"INSERT INTO tree_%d (version, sequence, bytes) VALUES (?, ?, ?)", defaultShardID))
+		"INSERT OR REPLACE INTO tree_%d (version, sequence, bytes) VALUES (?, ?, ?)", defaultShardID))
 	if err != nil {
 		return err
 	}
@@ -1342,13 +1341,6 @@ func (sql *SqliteDb) runAnalyze() error {
 	eg.SetLimit(2)
 
 	eg.Go(func() error {
-		if err := sql.treeWrite.Exec(fmt.Sprintf("ANALYZE tree_idx_%d;", defaultShardID)); err != nil {
-			return fmt.Errorf("failed to analyze tree %s: %w", sql.opts.Path, err)
-		}
-		return nil
-	})
-
-	eg.Go(func() error {
 		if err := sql.leafWrite.Exec("ANALYZE leaf_idx;"); err != nil {
 			return fmt.Errorf("failed to analyze tree leaf %s: %w", sql.opts.Path, err)
 		}
@@ -1373,13 +1365,6 @@ func (sql *SqliteDb) runOptimize() error {
 
 	eg := errgroup.Group{}
 	eg.SetLimit(2)
-
-	eg.Go(func() error {
-		if err := sql.treeWrite.Exec(fmt.Sprintf("PRAGMA optimize('tree_idx_%d');", defaultShardID)); err != nil {
-			return fmt.Errorf("failed to optimize tree %s: %w", sql.opts.Path, err)
-		}
-		return nil
-	})
 
 	eg.Go(func() error {
 		if err := sql.leafWrite.Exec("PRAGMA optimize('leaf_idx');"); err != nil {

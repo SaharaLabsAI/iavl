@@ -41,9 +41,6 @@ func TestBuildSqlite(t *testing.T) {
 	err = conn.Exec("CREATE INDEX node_key_idx ON node (version, seq)")
 	require.NoError(t, err)
 
-	err = conn.Exec("CREATE INDEX tree_idx ON tree_1 (version, sequence)")
-	require.NoError(t, err)
-
 	require.NoError(t, conn.Begin())
 
 	var stmt *gosqlite.Stmt

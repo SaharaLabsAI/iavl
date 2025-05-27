@@ -327,11 +327,6 @@ func (sql *SqliteDb) WriteSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	err = snap.sql.treeWrite.Exec(fmt.Sprintf(
-		"CREATE INDEX IF NOT EXISTS tree_idx_%d ON tree_%d (version, sequence);", snap.version, snap.version))
-	if err != nil {
-		return nil, err
-	}
 	err = snap.sql.leafWrite.Exec("CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);")
 	if err != nil {
 		return nil, err

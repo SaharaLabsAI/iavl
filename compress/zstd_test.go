@@ -5,7 +5,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,23 +14,26 @@ func TestZstdCompress(t *testing.T) {
 		the source file as the dictionary will produce a compressed
 		delta encoding of the target file.`)
 
-	e := ZstdEncoderPool.Get().(*zstd.Encoder)
+	e := ZstdEncoderPool.Get().(Encoder)
 	defer ZstdEncoderPool.Put(e)
 
-	delta := e.EncodeAll(source, nil)
+	var (
+		delta bytes.Buffer
+		out   bytes.Buffer
+	)
 
-	d := ZstdDecoderPool.Get().(*zstd.Decoder)
+	e.Reset(&delta)
+	_, err := e.Write(source)
+	require.NoError(t, err)
+	err = e.Close()
+	require.NoError(t, err)
+
+	d := ZstdDecoderPool.Get().(Decoder)
 	defer ZstdDecoderPool.Put(d)
 
-	out, err := d.DecodeAll(delta, nil)
+	d.Reset(&delta)
+	_, err = io.Copy(&out, d)
 	require.NoError(t, err)
 
-	require.Equal(t, source, out)
-
-	var out2 bytes.Buffer
-	d.Reset(bytes.NewBuffer(delta))
-	_, err = io.Copy(&out2, d)
-	require.NoError(t, err)
-
-	require.Equal(t, source, out2.Bytes())
+	require.Equal(t, source, out.Bytes())
 }

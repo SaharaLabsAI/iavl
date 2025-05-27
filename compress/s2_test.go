@@ -5,7 +5,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/klauspost/compress/s2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +14,7 @@ func TestS2Compress(t *testing.T) {
 		the source file as the dictionary will produce a compressed
 		delta encoding of the target file.`)
 
-	e := S2EncoderPool.Get().(*s2.Writer)
+	e := S2EncoderPool.Get().(Encoder)
 	defer S2EncoderPool.Put(e)
 
 	var (
@@ -29,7 +28,7 @@ func TestS2Compress(t *testing.T) {
 	err = e.Close()
 	require.NoError(t, err)
 
-	d := S2DecoderPool.Get().(*s2.Reader)
+	d := S2DecoderPool.Get().(Decoder)
 	defer S2DecoderPool.Put(d)
 
 	d.Reset(&delta)

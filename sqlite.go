@@ -941,7 +941,6 @@ func (sql *SqliteDb) WarmLeaves() error {
 	start := time.Now()
 
 	var stmt *gosqlite.Stmt
-	var err error
 
 	// Use the connection pool if available
 	if sql.readPool != nil {
@@ -952,6 +951,9 @@ func (sql *SqliteDb) WarmLeaves() error {
 		defer conn.MarkIdle()
 
 		stmt, err = conn.conn.Prepare("SELECT version, sequence, key, bytes FROM changelog.leaf")
+		if err != nil {
+			return err
+		}
 	} else {
 		read, err := sql.getReadConn()
 		if err != nil {
@@ -959,10 +961,9 @@ func (sql *SqliteDb) WarmLeaves() error {
 		}
 
 		stmt, err = read.Prepare("SELECT version, sequence, key, bytes FROM leaf")
-	}
-
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	var (

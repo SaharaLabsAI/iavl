@@ -91,44 +91,18 @@ func DefaultTreeOptions() TreeOptions {
 	}
 }
 
-// loadTaskPool reduces allocation for nodeLoadTask structs
 var loadTaskPool = &sync.Pool{
 	New: func() any {
 		return make([]nodeLoadTask, 0, 64) // Pre-allocate with reasonable capacity
 	},
 }
 
-// nodeSlicePool for reusing node slices
 var nodeSlicePool = &sync.Pool{
 	New: func() any {
 		return make([]*Node, 0, 1024)
 	},
 }
 
-// AtomicNodeCounter for lock-free progress tracking
-type AtomicNodeCounter struct {
-	completed int64
-	total     int64
-}
-
-func (c *AtomicNodeCounter) increment() {
-	atomic.AddInt64(&c.completed, 1)
-}
-
-func (c *AtomicNodeCounter) setTotal(total int64) {
-	atomic.StoreInt64(&c.total, total)
-}
-
-func (c *AtomicNodeCounter) progress() float64 {
-	completed := atomic.LoadInt64(&c.completed)
-	total := atomic.LoadInt64(&c.total)
-	if total == 0 {
-		return 0
-	}
-	return float64(completed) / float64(total)
-}
-
-// CompactNodeBatch for cache-friendly data layout
 type CompactNodeBatch struct {
 	nodes     []*Node
 	parentIdx []int32
@@ -150,7 +124,6 @@ func (cnb *CompactNodeBatch) add(node *Node, parent int32, left bool, key NodeKe
 	cnb.nodeKeys = append(cnb.nodeKeys, key)
 }
 
-// compactBatchPool for cache-friendly batch processing
 var compactBatchPool = &sync.Pool{
 	New: func() any {
 		return &CompactNodeBatch{
@@ -309,7 +282,6 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	tree.rw.Lock()
 	defer tree.rw.Unlock()
 
-	// TODO: fix query_trace_tx/query_trace_block panic (use after free)
 	// if err := tree.sql.closeHangingIterators(); err != nil {
 	// 	return nil, 0, err
 	// }

@@ -343,28 +343,26 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		pruneCount       int64
 		pruneStartTime   time.Time
 		orphanQuery      *gosqlite.Stmt
-		// TODO: support sharding
-		// TODO: use map
-		deleteBranch *gosqlite.Stmt
-		deleteOrphan *gosqlite.Stmt
+		deleteBranch     *BranchShardDelete
+		deleteOrphan     *gosqlite.Stmt
 	)
 
 	defer func() {
 		if orphanQuery != nil {
 			if err := orphanQuery.Close(); err != nil {
-				w.logger.Warn("stop sql writer, tree orphan query", "err", err)
+				w.logger.Error("stop sql writer, tree orphan query", "err", err)
 			}
 		}
 
 		if deleteBranch != nil {
 			if err := deleteBranch.Close(); err != nil {
-				w.logger.Warn("stop sql writer, tree delete branch", "err", err)
+				w.logger.Error("stop sql writer, tree delete branch", "err", err)
 			}
 		}
 
 		if deleteOrphan != nil {
 			if err := deleteOrphan.Close(); err != nil {
-				w.logger.Warn("stop sql writer, tree delete orphan", "err", err)
+				w.logger.Error("stop sql writer, tree delete orphan", "err", err)
 			}
 		}
 
@@ -378,12 +376,17 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 				return fmt.Errorf("failed to prepare orphan query; %w", err)
 			}
 		}
+
 		if deleteBranch == nil {
-			deleteBranch, err = w.sql.treeWrite.Prepare(fmt.Sprintf("DELETE FROM tree_%d WHERE version = ? AND sequence = ? LIMIT 1", defaultShardID))
+			deleteBranch, err = PrepareBranchShardDelete(w.sql, w.sql.branchShards)
 			if err != nil {
-				return fmt.Errorf("failed to prepare delete branch; %w", err)
+				return fmt.Errorf("failed to prepare branch delete; %w", err)
 			}
 		}
+		if err := deleteBranch.PrepareVersion(w.sql, version); err != nil {
+			return err
+		}
+
 		if deleteOrphan == nil {
 			deleteOrphan, err = w.sql.treeWrite.Prepare("DELETE FROM orphan WHERE ROWID = ?")
 			if err != nil {
@@ -458,7 +461,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			shard, err := w.sql.getShard(version)
+			shard, err := GetShardID(version)
 			if err != nil {
 				return err
 			}

@@ -284,7 +284,7 @@ func (sql *SqliteDb) WriteSnapshot(
 		log:       sql.logger,
 		writeTree: true,
 	}
-	if _, err := sql.nextShard(version); err != nil {
+	if _, err := GetShardID(version); err != nil {
 		return nil, err
 	}
 	err := snap.sql.leafWrite.Exec(

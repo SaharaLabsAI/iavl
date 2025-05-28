@@ -29,7 +29,7 @@ func TestBuildSqlite(t *testing.T) {
 	since := time.Now()
 
 	require.NoError(t, err)
-	_, err = sql.nextShard(1)
+	_, err = GetShardID(1)
 	require.NoError(t, err)
 	conn := sql.treeWrite
 

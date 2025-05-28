@@ -16,8 +16,7 @@ type SqliteReadConn struct {
 	queryLeaf *gosqlite.Stmt
 	queryKV   *gosqlite.Stmt
 
-	shards       *VersionRange
-	shardQueries map[int64]*gosqlite.Stmt
+	queryBranch *BranchShardQuery
 
 	opts *SqliteDbOptions
 
@@ -29,24 +28,20 @@ type SqliteReadConn struct {
 
 func NewSqliteReadConn(conn *gosqlite.Conn, opts *SqliteDbOptions, logger Logger) *SqliteReadConn {
 	return &SqliteReadConn{
-		conn:         conn,
-		treeVersion:  0,
-		shards:       &VersionRange{},
-		shardQueries: make(map[int64]*gosqlite.Stmt),
-		opts:         opts,
-		inUse:        false,
-		logger:       logger,
+		conn:        conn,
+		treeVersion: 0,
+		opts:        opts,
+		inUse:       false,
+		logger:      logger,
 	}
 }
 
 func NewSqliteImmutableReadConn(treeVersion int64, opts *SqliteDbOptions, logger Logger) *SqliteReadConn {
 	return &SqliteReadConn{
-		treeVersion:  treeVersion,
-		shards:       &VersionRange{},
-		shardQueries: make(map[int64]*gosqlite.Stmt),
-		opts:         opts,
-		inUse:        false,
-		logger:       logger,
+		treeVersion: treeVersion,
+		opts:        opts,
+		inUse:       false,
+		logger:      logger,
 	}
 }
 
@@ -210,20 +205,26 @@ func (c *SqliteReadConn) getLeaf(pool *NodePool, nodeKey NodeKey) (*Node, error)
 func (c *SqliteReadConn) getNode(pool *NodePool, nodeKey NodeKey) (*Node, error) {
 	defer c.MarkIdle()
 
-	q, err := c.getShardQuery(nodeKey.Version())
+	var err error
+	if c.queryBranch == nil {
+		c.queryBranch = PrepareBranchShardQuery(c)
+	}
+
+	if err := c.queryBranch.PrepareVersion(c, nodeKey.Version()); err != nil {
+		return nil, err
+	}
+
+	q, err := c.queryBranch.Bind(nodeKey.Version(), nodeKey.Sequence())
 	if err != nil {
 		return nil, err
 	}
 	defer q.Reset()
 
-	if err := q.Bind(nodeKey.Version(), int(nodeKey.Sequence())); err != nil {
-		return nil, err
-	}
-
 	hasRow, err := q.Step()
 	if !hasRow {
+		_, shardID := GetShardID(nodeKey.Version())
 		return nil, fmt.Errorf("node not found: %v; shard=%d; path=%s",
-			nodeKey, c.shards.Find(nodeKey.Version()), c.opts.Path)
+			nodeKey, shardID, c.opts.Path)
 	}
 	if err != nil {
 		return nil, err
@@ -241,88 +242,6 @@ func (c *SqliteReadConn) getNode(pool *NodePool, nodeKey NodeKey) (*Node, error)
 	}
 
 	return node, nil
-}
-
-func (c *SqliteReadConn) getShard(_ int64) (int64, error) {
-	// Disable shard and always return 1
-	return defaultShardID, nil
-}
-
-func (c *SqliteReadConn) getShardQuery(version int64) (*gosqlite.Stmt, error) {
-	v, err := c.getShard(version)
-	if err != nil {
-		return nil, err
-	}
-
-	if q, ok := c.shardQueries[v]; ok {
-		return q, nil
-	}
-
-	sqlQuery := fmt.Sprintf("SELECT bytes FROM tree_%d WHERE version = ? AND sequence = ? LIMIT 1", v)
-	q, err := c.conn.Prepare(sqlQuery)
-	if err != nil {
-		return nil, err
-	}
-
-	c.shardQueries[v] = q
-	c.logger.Debug(fmt.Sprintf("added shard query: %s", sqlQuery))
-
-	return q, nil
-}
-
-func (c *SqliteReadConn) ResetShardQueries() error {
-	// disable now because we don't enable sharding
-	return nil
-
-	// treeWrite, err := gosqlite.Open(c.opts.treeConnectionString(), c.opts.Mode)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer treeWrite.Close()
-	//
-	// for k, q := range c.shardQueries {
-	// 	err := q.Close()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	delete(c.shardQueries, k)
-	// }
-	//
-	// c.shards = &VersionRange{}
-	//
-	// q, err := treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tree_%'")
-	// if err != nil {
-	// 	return err
-	// }
-	// defer q.Close()
-	//
-	// for {
-	// 	hasRow, err := q.Step()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	if !hasRow {
-	// 		break
-	// 	}
-	//
-	// 	var shard string
-	// 	err = q.Scan(&shard)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	shardVersion, err := strconv.Atoi(shard[5:])
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	if err = c.shards.Add(int64(shardVersion)); err != nil {
-	// 		return fmt.Errorf("failed to add shard path=%s: %w", c.opts.Path, err)
-	// 	}
-	// }
-	//
-	// return nil
 }
 
 func (c *SqliteReadConn) IsInUse() bool {
@@ -361,12 +280,11 @@ func (c *SqliteReadConn) Close() error {
 		c.queryKV = nil
 	}
 
-	for k, q := range c.shardQueries {
-		err := q.Close()
-		if err != nil {
+	if c.queryBranch != nil {
+		if err := c.queryBranch.Close(); err != nil {
 			return err
 		}
-		delete(c.shardQueries, k)
+		c.queryBranch = nil
 	}
 
 	return c.conn.Close()

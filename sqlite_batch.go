@@ -28,7 +28,7 @@ type sqliteBatch struct {
 	leafSince time.Time
 
 	leafInsert *gosqlite.Stmt
-	treeInsert *gosqlite.Stmt
+	treeInsert *BranchShardInsert
 	leafOrphan *gosqlite.Stmt
 	treeOrphan *gosqlite.Stmt
 }
@@ -408,10 +408,15 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 
 	tree := b.tree
 
-	shardID, err := tree.sql.nextShard(tree.version.Load())
+	shardID, err := GetShardID(tree.version.Load())
 	if err != nil {
 		return 0, err
 	}
+
+	if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
+		return 0, err
+	}
+
 	b.logger.Debug(fmt.Sprintf("save branches db=tree version=%d shard=%d orphans=%s",
 		tree.version.Load(), shardID, humanize.Comma(int64(len(tree.branchOrphans)))))
 

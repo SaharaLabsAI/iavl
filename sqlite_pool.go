@@ -118,20 +118,6 @@ func (pool *SqliteReadonlyConnPool) CloseHangingIterators() error {
 	return pool.iters.closeHangingIterators()
 }
 
-// GetHeightOneBranchesIterator prepares and returns a statement for height one branches iterator queries
-func (pool *SqliteReadonlyConnPool) GetHeightOneBranchesIterator(conn *SqliteReadConn, start, end int64) (*gosqlite.Stmt, error) {
-	stmt, err := conn.conn.Prepare(
-		fmt.Sprintf("SELECT version, sequence, bytes FROM tree_%d WHERE version >= ? AND version <= ? ORDER BY version ASC", defaultShardID))
-	if err != nil {
-		return nil, err
-	}
-	if err = stmt.Bind(start, end); err != nil {
-		return nil, err
-	}
-
-	return stmt, nil
-}
-
 func (pool *SqliteReadonlyConnPool) GetVersionDescLeafIterator(version int64, limit int) (stmt *gosqlite.Stmt, idx int, err error) {
 	conn, err := pool.GetConn()
 	if err != nil {

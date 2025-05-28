@@ -1267,7 +1267,7 @@ func (sql *SqliteDb) latestRoot() (version int64, err error) {
 }
 
 // FIXME: this feature is useful for wrong root hash debug
-func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, :err error) {
+func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err

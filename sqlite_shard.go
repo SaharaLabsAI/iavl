@@ -75,8 +75,18 @@ type BranchShardInsert struct {
 	stmts map[int64]*gosqlite.Stmt // shardID -> stmt
 }
 
-func PrepareBranchShardInsert(sql *SqliteDb, _ *BranchShards) (*BranchShardInsert, error) {
+func PrepareBranchShardInsert(sql *SqliteDb, shards *BranchShards) (*BranchShardInsert, error) {
 	stmts := make(map[int64]*gosqlite.Stmt)
+
+	for shardID, _ := range shards.shardIDs {
+		st, err := sql.preapreBranchShardInsertStatement(shardID)
+		if err != nil {
+			return nil, err
+		}
+
+		stmts[shardID] = st
+	}
+
 	return &BranchShardInsert{stmts: stmts}, nil
 }
 

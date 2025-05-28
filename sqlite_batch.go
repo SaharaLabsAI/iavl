@@ -445,6 +445,11 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 	for i, branch := range compressedBranches {
 		b.treeCount++
 
+		shardID := ToShardID(branch.version)
+		if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
+			return 0, err
+		}
+
 		if err = b.treeInsert.Exec(branch.version, branch.sequence, branch.compressed); err != nil {
 			return 0, err
 		}

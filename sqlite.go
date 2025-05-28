@@ -18,8 +18,6 @@ import (
 )
 
 const defaultSQLitePath = "/tmp/iavl2"
-const defaultStartShardID = int64(1)
-const defaultTreeShardSize = 500_000
 const defaultMaxPoolSize = 1000
 const defaultPageSize = 4096 * 8 // 32K
 const defaultThreadsCount = 8
@@ -311,7 +309,7 @@ func (sql *SqliteDb) createShardTableIfNotExists(shardID int) error {
 		return nil
 	}
 
-	sql.logger.Info(fmt.Sprintf("creating shard %d", shardID))
+	sql.logger.Info(fmt.Sprintf("creating %s shard %d", sql.opts.Path, shardID))
 	return sql.treeWrite.Exec(fmt.Sprintf(
 		"CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool, PRIMARY KEY (version, sequence)) WITHOUT ROWID;", shardID))
 }
@@ -910,14 +908,6 @@ func (sql *SqliteDb) LoadRoot(version int64) (*Node, error) {
 	return root, nil
 }
 
-func GetShardID(version int64) (int64, error) {
-	if version <= 0 {
-		return -1, fmt.Errorf("invalid version: %d", version)
-	}
-	shardID := (version-1)/defaultTreeShardSize + defaultStartShardID
-	return shardID, nil
-}
-
 func (sql *SqliteDb) ResetShardQueries() error {
 	// if sql.read != nil {
 	// 	if err := sql.read.ResetShardQueries(); err != nil {
@@ -1075,15 +1065,8 @@ func (sql *SqliteDb) Revert(version int64) error {
 		return err
 	}
 
-	maxShardID, err := GetShardID(latestVersion)
-	if err != nil {
-		return err
-	}
-
-	startShardID, err := GetShardID(version)
-	if err != nil {
-		return err
-	}
+	maxShardID := ToShardID(latestVersion)
+	startShardID := ToShardID(version)
 
 	for shardID := startShardID; shardID <= maxShardID; shardID++ {
 		if err := sql.treeWrite.Exec(fmt.Sprintf("DELETE FROM tree_%d WHERE version > ?", shardID), version); err != nil {
@@ -1283,16 +1266,14 @@ func (sql *SqliteDb) latestRoot() (version int64, err error) {
 	return version, nil
 }
 
-func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
+// FIXME: this feature is useful for wrong root hash debug
+func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, :err error) {
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
 	}
 
-	shardID, err := GetShardID(start)
-	if err != nil {
-		return nil, err
-	}
+	shardID := ToShardID(start)
 
 	stmt, err = conn.Prepare(
 		fmt.Sprintf("SELECT version, sequence, bytes FROM tree_%d WHERE version >= ? AND version <= ? ORDER BY version ASC", shardID))

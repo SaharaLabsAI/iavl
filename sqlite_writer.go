@@ -461,12 +461,9 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			shard, err := GetShardID(version)
-			if err != nil {
-				return err
-			}
+			shardID := ToShardID(version)
 			if err = deleteBranch.Exec(version, sequence); err != nil {
-				return fmt.Errorf("failed to delete from tree_%d count=%d; %w", shard, pruneCount, err)
+				return fmt.Errorf("failed to delete from tree_%d count=%d; %w", shardID, pruneCount, err)
 			}
 			if err = deleteOrphan.Exec(rowID); err != nil {
 				return fmt.Errorf("failed to delete from orphan count=%d; %w", pruneCount, err)

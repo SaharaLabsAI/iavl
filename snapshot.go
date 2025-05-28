@@ -284,9 +284,6 @@ func (sql *SqliteDb) WriteSnapshot(
 		log:       sql.logger,
 		writeTree: true,
 	}
-	if _, err := GetShardID(version); err != nil {
-		return nil, err
-	}
 	err := snap.sql.leafWrite.Exec(
 		fmt.Sprintf(`CREATE TABLE snapshot_%d (ordinal int, version int, sequence int, bytes blob);`, version))
 	if err != nil {

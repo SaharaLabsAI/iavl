@@ -7,6 +7,16 @@ import (
 	"github.com/eatonphil/gosqlite"
 )
 
+const defaultStartShardID = int64(1)
+const defaultTreeShardSize = 500_000
+
+func ToShardID(version int64) int64 {
+	if version <= 0 {
+		return defaultStartShardID
+	}
+	return (version-1)/defaultTreeShardSize + defaultStartShardID
+}
+
 type BranchShards struct {
 	shardIDs map[int64]bool
 }
@@ -91,10 +101,7 @@ func (ss *BranchShardInsert) EnsureShardTable(sql *SqliteDb, shardID int64) erro
 }
 
 func (ss *BranchShardInsert) Exec(version int64, sequence int, bz []byte) error {
-	shardID, err := GetShardID(version)
-	if err != nil {
-		return err
-	}
+	shardID := ToShardID(version)
 
 	st, exists := ss.stmts[shardID]
 	if !exists {
@@ -136,10 +143,7 @@ func PrepareBranchShardDelete(sql *SqliteDb, _ *BranchShards) (*BranchShardDelet
 }
 
 func (sd *BranchShardDelete) PrepareVersion(sql *SqliteDb, version int64) error {
-	shardID, err := GetShardID(version)
-	if err != nil {
-		return err
-	}
+	shardID := ToShardID(version)
 
 	if _, exists := sd.stmts[shardID]; exists {
 		return nil
@@ -156,10 +160,7 @@ func (sd *BranchShardDelete) PrepareVersion(sql *SqliteDb, version int64) error 
 }
 
 func (sd *BranchShardDelete) Exec(version int64, sequence int) error {
-	shardID, err := GetShardID(version)
-	if err != nil {
-		return err
-	}
+	shardID := ToShardID(version)
 
 	st, exists := sd.stmts[shardID]
 	if !exists {
@@ -201,10 +202,7 @@ func PrepareBranchShardQuery(c *SqliteReadConn) *BranchShardQuery {
 }
 
 func (sq *BranchShardQuery) PrepareVersion(c *SqliteReadConn, version int64) error {
-	shardID, err := GetShardID(version)
-	if err != nil {
-		return err
-	}
+	shardID := ToShardID(version)
 
 	if _, exists := sq.stmts[shardID]; exists {
 		return nil
@@ -222,10 +220,7 @@ func (sq *BranchShardQuery) PrepareVersion(c *SqliteReadConn, version int64) err
 }
 
 func (sq *BranchShardQuery) Bind(version int64, sequence uint32) (*gosqlite.Stmt, error) {
-	shardID, err := GetShardID(version)
-	if err != nil {
-		return nil, err
-	}
+	shardID := ToShardID(version)
 
 	st, exists := sq.stmts[shardID]
 	if !exists {

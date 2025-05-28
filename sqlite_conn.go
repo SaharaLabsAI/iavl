@@ -222,9 +222,8 @@ func (c *SqliteReadConn) getNode(pool *NodePool, nodeKey NodeKey) (*Node, error)
 
 	hasRow, err := q.Step()
 	if !hasRow {
-		_, shardID := GetShardID(nodeKey.Version())
 		return nil, fmt.Errorf("node not found: %v; shard=%d; path=%s",
-			nodeKey, shardID, c.opts.Path)
+			nodeKey, ToShardID(nodeKey.Version()), c.opts.Path)
 	}
 	if err != nil {
 		return nil, err

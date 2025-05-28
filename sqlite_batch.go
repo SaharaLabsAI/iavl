@@ -408,11 +408,7 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 
 	tree := b.tree
 
-	shardID, err := GetShardID(tree.version.Load())
-	if err != nil {
-		return 0, err
-	}
-
+	shardID := ToShardID(tree.version.Load())
 	if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
 		return 0, err
 	}

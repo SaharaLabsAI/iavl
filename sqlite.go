@@ -347,7 +347,7 @@ CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob,
 		// NOTE: we need leaf_idx, so we cannot use `WITHOUT ROWID` because leaf_idx must store the full PRIMARY KEY
 		// as their row reference
 		err = sql.leafWrite.Exec(`
-CREATE TABLE leaf (version int, sequence int, key blob, bytes blob, orphaned bool, PRIMARY KEY (key, version DESC));
+CREATE TABLE leaf (version int, sequence int, key_hash blob, bytes blob, orphaned bool, PRIMARY KEY (key_hash, version DESC));
 CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);
 CREATE TABLE leaf_orphan (version int, sequence int, at int);
 CREATE INDEX leaf_orphan_idx ON leaf_orphan (at DESC);`)
@@ -472,7 +472,7 @@ func (sql *SqliteDb) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.leafInsert, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf (version, sequence, key, bytes) VALUES (?, ?, ?, ?)")
+	sql.leafInsert, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf (version, sequence, key_hash, bytes) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
@@ -947,7 +947,7 @@ func (sql *SqliteDb) WarmLeaves() error {
 		}
 		defer conn.MarkIdle()
 
-		stmt, err = conn.conn.Prepare("SELECT version, sequence, key, bytes FROM changelog.leaf")
+		stmt, err = conn.conn.Prepare("SELECT version, sequence, key_hash, bytes FROM changelog.leaf")
 		if err != nil {
 			return err
 		}
@@ -957,7 +957,7 @@ func (sql *SqliteDb) WarmLeaves() error {
 			return err
 		}
 
-		stmt, err = read.Prepare("SELECT version, sequence, key, bytes FROM leaf")
+		stmt, err = read.Prepare("SELECT version, sequence, key_hash, bytes FROM leaf")
 		if err != nil {
 			return err
 		}
@@ -1158,7 +1158,7 @@ func (sql *SqliteDb) replayChangelog(tree *Tree, toVersion int64, targetHash []b
 	defer conn.MarkIdle()
 
 	q, err = conn.Prepare(`SELECT * FROM (
-			SELECT version, sequence, key, bytes
+			SELECT version, sequence, key_hash, bytes
 		FROM leaf WHERE version > ? AND version <= ?
 		) as ops
 		ORDER BY version, sequence`)

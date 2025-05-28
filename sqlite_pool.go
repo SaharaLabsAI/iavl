@@ -141,14 +141,14 @@ func (pool *SqliteReadonlyConnPool) GetVersionDescLeafIterator(version int64, li
 	idx = pool.iters.nextIdx()
 
 	stmt, err = conn.Prepare(`
-		SELECT l.key, l.bytes, l.version
+		SELECT l.key_hash, l.bytes, l.version
 		FROM changelog.leaf l
 		INNER JOIN (
-			SELECT key, MAX(version) as max_version
+			SELECT key_hash, MAX(version) as max_version
 			FROM changelog.leaf
 			WHERE bytes IS NOT NULL AND version <= ?
-			GROUP BY key
-		) m ON l.key = m.key AND l.version = m.max_version
+			GROUP BY key_hash
+		) m ON l.key_hash = m.key_hash AND l.version = m.max_version
 		LIMIT ?;
 	`)
 	if err != nil {

@@ -137,7 +137,7 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 
 	var err error
 	if c.queryKV == nil {
-		c.queryKV, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE key = ? AND version <= ? ORDER BY version DESC LIMIT 1")
+		c.queryKV, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE key_hash = ? AND version <= ? ORDER BY version DESC LIMIT 1")
 		if err != nil {
 			return nil, err
 		}

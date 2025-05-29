@@ -1053,9 +1053,6 @@ func (sql *SqliteDb) Revert(version int64) error {
 	if err := sql.leafWrite.Exec("DELETE FROM leaf_orphan WHERE at > ?", version); err != nil {
 		return err
 	}
-	if err := sql.treeWrite.Exec("DELETE FROM root WHERE version > ?", version); err != nil {
-		return err
-	}
 	if err := sql.treeWrite.Exec("DELETE FROM orphan WHERE at > ?", version); err != nil {
 		return err
 	}
@@ -1065,13 +1062,17 @@ func (sql *SqliteDb) Revert(version int64) error {
 		return err
 	}
 
-	maxShardID := ToShardID(latestVersion)
-	startShardID := ToShardID(version)
+	toShardID := ToShardID(latestVersion)
+	fromShardID := ToShardID(version)
 
-	for shardID := startShardID; shardID <= maxShardID; shardID++ {
+	for shardID := fromShardID; shardID <= toShardID; shardID++ {
 		if err := sql.treeWrite.Exec(fmt.Sprintf("DELETE FROM tree_%d WHERE version > ?", shardID), version); err != nil {
 			return err
 		}
+	}
+
+	if err := sql.treeWrite.Exec("DELETE FROM root WHERE version > ?", version); err != nil {
+		return err
 	}
 
 	return nil

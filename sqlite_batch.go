@@ -11,6 +11,7 @@ import (
 	"github.com/eatonphil/gosqlite"
 	"lukechampine.com/blake3"
 
+	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/metrics"
 	"github.com/cosmos/iavl/v2/pool"
 )
@@ -142,7 +143,7 @@ func (b *sqliteBatch) parallelCompressLeaves(leaves []*Node) ([]CompressedLeafDa
 			buf := bufPool.Get().(*bytes.Buffer)
 			defer bufPool.Put(buf)
 
-			encoder := pool.Compress{}.GetEncoder()
+			encoder := pool.Compress{}.GetEncoder(compress.S2)
 			defer pool.Compress{}.PutEncoder(encoder)
 
 			for work := range input {
@@ -239,7 +240,7 @@ func (b *sqliteBatch) parallelCompressBranches(branches []*Node) ([]CompressedBr
 			buf := bufPool.Get().(*bytes.Buffer)
 			defer bufPool.Put(buf)
 
-			encoder := pool.Compress{}.GetEncoder()
+			encoder := pool.Compress{}.GetEncoder(compress.ZSTD)
 			defer pool.Compress{}.PutEncoder(encoder)
 
 			for work := range input {

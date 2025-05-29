@@ -12,6 +12,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/cosmos/iavl/v2/compress"
 	encoding "github.com/cosmos/iavl/v2/internal"
 	ipool "github.com/cosmos/iavl/v2/pool"
 )
@@ -575,7 +576,12 @@ func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
 	decBuf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(decBuf)
 
-	decoder := ipool.Compress{}.GetDecoder()
+	var decoder compress.Decoder
+	if isLeafSeq(nodeKey.Sequence()) {
+		decoder = ipool.Compress{}.GetDecoder(compress.S2)
+	} else {
+		decoder = ipool.Compress{}.GetDecoder(compress.ZSTD)
+	}
 	defer ipool.Compress{}.PutDecoder(decoder)
 
 	decBuf.Reset()
@@ -755,7 +761,7 @@ func extractValue(buf []byte) ([]byte, error) {
 	decBuf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(decBuf)
 
-	decoder := ipool.Compress{}.GetDecoder()
+	decoder := ipool.Compress{}.GetDecoder(compress.S2)
 	defer ipool.Compress{}.PutDecoder(decoder)
 
 	decBuf.Reset()

@@ -13,6 +13,7 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/metrics"
 	"github.com/cosmos/iavl/v2/pool"
 )
@@ -834,7 +835,7 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 		compressBuf := bufPool.Get().(*bytes.Buffer)
 		defer bufPool.Put(compressBuf)
 
-		encoder := pool.Compress{}.GetEncoder()
+		encoder := pool.Compress{}.GetEncoder(compress.ZSTD)
 		defer pool.Compress{}.PutEncoder(encoder)
 
 		compressBuf.Reset()

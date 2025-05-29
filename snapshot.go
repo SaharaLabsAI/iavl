@@ -15,6 +15,7 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"github.com/kocubinski/costor-api/logz"
 
+	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/pool"
 )
 
@@ -191,7 +192,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 				return nil, err
 			}
 
-			encoder := pool.Compress{}.GetEncoder()
+			encoder := pool.Compress{}.GetEncoder(compress.S2)
 			defer pool.Compress{}.PutEncoder(encoder)
 
 			compressBuf.Reset()
@@ -235,7 +236,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 			return nil, err
 		}
 
-		encoder := pool.Compress{}.GetEncoder()
+		encoder := pool.Compress{}.GetEncoder(compress.ZSTD)
 		defer pool.Compress{}.PutEncoder(encoder)
 
 		compressBuf.Reset()
@@ -480,7 +481,12 @@ func (snap *sqliteSnapshot) writeStep(node *Node) error {
 		return err
 	}
 
-	encoder := pool.Compress{}.GetEncoder()
+	var encoder compress.Encoder
+	if node.isLeaf() {
+		encoder = pool.Compress{}.GetEncoder(compress.S2)
+	} else {
+		encoder = pool.Compress{}.GetEncoder(compress.ZSTD)
+	}
 	defer pool.Compress{}.PutEncoder(encoder)
 
 	compressBuf.Reset()
@@ -752,7 +758,12 @@ func (snap *sqliteSnapshot) writeSnapNode(node *Node, version int64, ordinal, se
 		return err
 	}
 
-	encoder := pool.Compress{}.GetEncoder()
+	var encoder compress.Encoder
+	if node.isLeaf() {
+		encoder = pool.Compress{}.GetEncoder(compress.S2)
+	} else {
+		encoder = pool.Compress{}.GetEncoder(compress.ZSTD)
+	}
 	defer pool.Compress{}.PutEncoder(encoder)
 
 	compressBuf.Reset()

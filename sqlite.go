@@ -1267,8 +1267,13 @@ func (sql *SqliteDb) latestRoot() (version int64, err error) {
 	return version, nil
 }
 
-// FIXME: this feature is useful for wrong root hash debug
 func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
+	fromShardID := ToShardID(start)
+	toShardID := ToShardID(end)
+	if fromShardID != toShardID {
+		return nil, fmt.Errorf("from shard %d to shard %d, cross different branch shards are not support", fromShardID, toShardID)
+	}
+
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err

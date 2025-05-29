@@ -3,6 +3,7 @@ package iavl
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/eatonphil/gosqlite"
 )
@@ -144,12 +145,14 @@ func (ss *BranchShardInsert) Close() error {
 }
 
 type BranchShardDelete struct {
-	stmts map[int64]*gosqlite.Stmt // shardID -> stmt
+	stmts     map[int64]*gosqlite.Stmt // shardID -> stmt
+	nonexists map[int64]bool
 }
 
 func PrepareBranchShardDelete(sql *SqliteDb, _ *BranchShards) (*BranchShardDelete, error) {
 	stmts := make(map[int64]*gosqlite.Stmt)
-	return &BranchShardDelete{stmts: stmts}, nil
+	nonexists := make(map[int64]bool)
+	return &BranchShardDelete{stmts: stmts, nonexists: nonexists}, nil
 }
 
 func (sd *BranchShardDelete) PrepareVersion(sql *SqliteDb, version int64) error {
@@ -161,16 +164,26 @@ func (sd *BranchShardDelete) PrepareVersion(sql *SqliteDb, version int64) error 
 
 	st, err := sql.treeWrite.Prepare(fmt.Sprintf("DELETE FROM tree_%d WHERE version = ? AND sequence = ? LIMIT 1", shardID))
 	if err != nil {
+		if strings.Contains(err.Error(), fmt.Sprintf("no such table: tree_%d", shardID)) {
+			sd.nonexists[shardID] = true
+			return nil
+		}
+
 		return err
 	}
 
 	sd.stmts[shardID] = st
+	delete(sd.nonexists, shardID)
 
 	return nil
 }
 
 func (sd *BranchShardDelete) Exec(version int64, sequence int) error {
 	shardID := ToShardID(version)
+
+	if _, nonexists := sd.nonexists[shardID]; nonexists {
+		return nil
+	}
 
 	st, exists := sd.stmts[shardID]
 	if !exists {
@@ -197,6 +210,10 @@ func (sd *BranchShardDelete) Close() error {
 			return fmt.Errorf("failed to close shard %d delete stmt: %w", shardID, err)
 		}
 		delete(sd.stmts, shardID)
+	}
+
+	for shardID := range sd.nonexists {
+		delete(sd.nonexists, shardID)
 	}
 
 	return nil

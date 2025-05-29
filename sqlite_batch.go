@@ -119,6 +119,11 @@ type CompressedBranchData struct {
 }
 
 func (b *sqliteBatch) parallelCompressLeaves(leaves []*Node) ([]CompressedLeafData, error) {
+	start := time.Now()
+	defer func() {
+		fmt.Printf("compress leaves duration %d\n", time.Since(start).Milliseconds())
+	}()
+
 	numWorkers := runtime.GOMAXPROCS(0) / 2
 	if numWorkers > len(leaves) {
 		numWorkers = len(leaves)
@@ -216,6 +221,11 @@ func (b *sqliteBatch) parallelCompressLeaves(leaves []*Node) ([]CompressedLeafDa
 }
 
 func (b *sqliteBatch) parallelCompressBranches(branches []*Node) ([]CompressedBranchData, error) {
+	start := time.Now()
+	defer func() {
+		fmt.Printf("compress branche duration %d\n", time.Since(start).Milliseconds())
+	}()
+
 	numWorkers := runtime.GOMAXPROCS(0) / 2
 	if numWorkers > len(branches) {
 		numWorkers = len(branches)
@@ -310,6 +320,15 @@ func (b *sqliteBatch) parallelCompressBranches(branches []*Node) ([]CompressedBr
 }
 
 func (b *sqliteBatch) saveLeaves() (int64, error) {
+	sizeCount := 0
+	sizeSmallCount := 0
+	sizeBiggerCount := 0
+
+	start := time.Now()
+	defer func() {
+		fmt.Printf("save leaves %d < 4k %d < 8k %d < 32k %d duration %d\n", b.leafCount, sizeCount, sizeSmallCount, sizeBiggerCount, time.Since(start).Milliseconds())
+	}()
+
 	b.leafInsert = b.sql.leafInsert
 	b.leafOrphan = b.sql.leafOrphan
 	b.leafCount = 0
@@ -345,6 +364,18 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 
 	for i, leaf := range compressedLeaves {
 		b.leafCount++
+
+		if len(leaf.compressed) < 8192*4 {
+			sizeBiggerCount++
+		}
+
+		if len(leaf.compressed) < 8192 {
+			sizeCount++
+		}
+
+		if len(leaf.compressed) < 4096 {
+			sizeSmallCount++
+		}
 
 		if err = b.leafInsert.Exec(leaf.version, leaf.sequence, leaf.keyHash, leaf.compressed); err != nil {
 			return 0, err
@@ -403,6 +434,14 @@ func (b *sqliteBatch) saveLeaves() (int64, error) {
 }
 
 func (b *sqliteBatch) saveBranches() (n int64, err error) {
+	sizeCount := 0
+	sizeSmallCount := 0
+
+	start := time.Now()
+	defer func() {
+		fmt.Printf("save breanches %d < 4k %d < 8k %d duration %d\n", b.treeCount, sizeSmallCount, sizeCount, time.Since(start).Milliseconds())
+	}()
+
 	b.treeInsert = b.sql.treeInsert
 	b.treeOrphan = b.sql.treeOrphan
 	b.treeCount = 0
@@ -449,6 +488,13 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 		shardID := ToShardID(branch.version)
 		if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
 			return 0, err
+		}
+
+		if len(branch.compressed) < 8192 {
+			sizeCount++
+		}
+		if len(branch.compressed) < 4096 {
+			sizeSmallCount++
 		}
 
 		if err = b.treeInsert.Exec(branch.version, branch.sequence, branch.compressed); err != nil {

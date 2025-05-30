@@ -144,14 +144,14 @@ func (w *sqlWriter) leafLoop(ctx context.Context) error {
 
 	beginPruneBatch := func(pruneTo int64) error {
 		if orphanQuery == nil {
-			orphanQuery, err = w.sql.leafWrite.Prepare(`SELECT version, sequence, ROWID FROM leaf_orphan WHERE at <= ?`)
+			orphanQuery, err = w.sql.leafWrite.Prepare(`SELECT version, sequence, at FROM leaf_orphan WHERE at <= ?`)
 			if err != nil {
 				return fmt.Errorf("failed to prepare leaf orphan query; %w", err)
 			}
 		}
 
 		if deleteOrphan == nil {
-			deleteOrphan, err = w.sql.leafWrite.Prepare("DELETE FROM leaf_orphan WHERE ROWID = ?")
+			deleteOrphan, err = w.sql.leafWrite.Prepare("DELETE FROM leaf_orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
 			if err != nil {
 				return fmt.Errorf("failed to prepare leaf orphan delete; %w", err)
 			}
@@ -228,16 +228,16 @@ func (w *sqlWriter) leafLoop(ctx context.Context) error {
 			var (
 				version  int64
 				sequence int
-				rowID    int64
+				at       int64
 			)
-			err = orphanQuery.Scan(&version, &sequence, &rowID)
+			err = orphanQuery.Scan(&version, &sequence, &at)
 			if err != nil {
 				return err
 			}
 			if err = deleteLeaf.Exec(version, sequence); err != nil {
 				return err
 			}
-			if err = deleteOrphan.Exec(rowID); err != nil {
+			if err = deleteOrphan.Exec(at, version, sequence); err != nil {
 				return err
 			}
 			if pruneCount%pruneBatchSize == 0 {
@@ -371,7 +371,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 
 	beginPruneBatch := func(version int64) (err error) {
 		if orphanQuery == nil {
-			orphanQuery, err = w.sql.treeWrite.Prepare("SELECT version, sequence, at, ROWID FROM orphan WHERE at <= ?")
+			orphanQuery, err = w.sql.treeWrite.Prepare("SELECT version, sequence, at FROM orphan WHERE at <= ?")
 			if err != nil {
 				return fmt.Errorf("failed to prepare orphan query; %w", err)
 			}
@@ -388,7 +388,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		}
 
 		if deleteOrphan == nil {
-			deleteOrphan, err = w.sql.treeWrite.Prepare("DELETE FROM orphan WHERE ROWID = ?")
+			deleteOrphan, err = w.sql.treeWrite.Prepare("DELETE FROM orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
 			if err != nil {
 				return fmt.Errorf("failed to prepare orphan delete; %w", err)
 			}
@@ -454,10 +454,9 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 			var (
 				version  int64
 				sequence int
-				at       int
-				rowID    int64
+				at       int64
 			)
-			err = orphanQuery.Scan(&version, &sequence, &at, &rowID)
+			err = orphanQuery.Scan(&version, &sequence, &at)
 			if err != nil {
 				return err
 			}
@@ -469,7 +468,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 				shardID := ToShardID(version)
 				return fmt.Errorf("failed to delete from tree_%d count=%d; %w", shardID, pruneCount, err)
 			}
-			if err = deleteOrphan.Exec(rowID); err != nil {
+			if err = deleteOrphan.Exec(at, version, sequence); err != nil {
 				return fmt.Errorf("failed to delete from orphan count=%d; %w", pruneCount, err)
 			}
 			if pruneCount%pruneBatchSize == 0 {
@@ -615,8 +614,3 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 
 	return err
 }
-
-// TODO
-// unify delete approach between tree and leaf. tree uses rowid range in delete, leaf issues delete for each rowid.
-// which one is faster?
-//

@@ -340,9 +340,8 @@ func (sql *SqliteDb) createTableIfNotExists() error {
 		}
 
 		err = sql.treeWrite.Exec(`
-CREATE TABLE orphan (version int, sequence int, at int);
-CREATE INDEX orphan_idx ON orphan (at DESC);
-CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob, PRIMARY KEY (version))`)
+CREATE TABLE orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;
+CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob, PRIMARY KEY (version DESC)) WITHOUT ROWID`)
 		if err != nil {
 			return err
 		}
@@ -375,8 +374,7 @@ CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob,
 		err = sql.leafWrite.Exec(`
 CREATE TABLE leaf (version int, sequence int, key_hash blob, bytes blob, orphaned bool, PRIMARY KEY (key_hash, version DESC));
 CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);
-CREATE TABLE leaf_orphan (version int, sequence int, at int);
-CREATE INDEX leaf_orphan_idx ON leaf_orphan (at DESC);`)
+CREATE TABLE leaf_orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;`)
 		if err != nil {
 			return err
 		}
@@ -517,7 +515,7 @@ func (sql *SqliteDb) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.leafOrphan, err = sql.leafWrite.Prepare("INSERT INTO leaf_orphan (version, sequence, at) VALUES (?, ?, ?)")
+	sql.leafOrphan, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf_orphan (version, sequence, at) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
 	}
@@ -527,7 +525,7 @@ func (sql *SqliteDb) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.treeOrphan, err = sql.treeWrite.Prepare("INSERT INTO orphan (version, sequence, at) VALUES (?, ?, ?)")
+	sql.treeOrphan, err = sql.treeWrite.Prepare("INSERT OR REPLACE INTO orphan (version, sequence, at) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
 	}

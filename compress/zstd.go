@@ -12,13 +12,13 @@ var (
 )
 
 var (
-	compressLevel   = zstd.WithEncoderLevel(zstd.SpeedBetterCompression)
-	memoryOptimized = zstd.WithLowerEncoderMem(true)
-	windowSize      = zstd.WithWindowSize(64 * 1024)
+	compressLevel = zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(19))
+	// memoryOptimized = zstd.WithLowerEncoderMem(true)
+	windowSize = zstd.WithWindowSize(64 * 1024)
 
 	ZstdEncoderPool = &sync.Pool{
 		New: func() any {
-			w, _ := zstd.NewWriter(nil, compressLevel, memoryOptimized, windowSize)
+			w, _ := zstd.NewWriter(nil, compressLevel, windowSize)
 			return &ZstdEncoder{
 				Encoder: w,
 			}

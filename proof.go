@@ -12,6 +12,7 @@ import (
 	ics23 "github.com/cosmos/ics23/go"
 
 	encoding "github.com/cosmos/iavl/v2/internal"
+	"github.com/cosmos/iavl/v2/types"
 )
 
 var proofBufPool = &sync.Pool{
@@ -190,7 +191,7 @@ func convertVarIntToBytes(orig int64, buf [binary.MaxVarintLen64]byte) []byte {
 // If the key does not exist, returns the path to the next leaf left of key (w/
 // path), except when key is less than the least item, in which case it returns
 // a path to the least item.
-func (tree *Tree) PathToLeaf(node *Node, key []byte) (PathToLeaf, *Node, error) {
+func (tree *Tree) PathToLeaf(node *types.Node, key []byte) (PathToLeaf, *types.Node, error) {
 	path := new(PathToLeaf)
 	val, err := tree.pathToLeaf(node, key, path)
 	return *path, val, err
@@ -199,9 +200,9 @@ func (tree *Tree) PathToLeaf(node *Node, key []byte) (PathToLeaf, *Node, error) 
 // pathToLeaf is a helper which recursively constructs the PathToLeaf.
 // As an optimization the already constructed path is passed in as an argument
 // and is shared among recursive calls.
-func (tree *Tree) pathToLeaf(node *Node, key []byte, path *PathToLeaf) (*Node, error) {
-	if node.subtreeHeight == 0 {
-		if bytes.Equal(node.key, key) {
+func (tree *Tree) pathToLeaf(node *types.Node, key []byte, path *PathToLeaf) (*types.Node, error) {
+	if node.SubTreeHeight() == 0 {
+		if bytes.Equal(node.Key(), key) {
 			return node, nil
 		}
 		return node, errors.New("key does not exist")
@@ -211,7 +212,7 @@ func (tree *Tree) pathToLeaf(node *Node, key []byte, path *PathToLeaf) (*Node, e
 	// left node as part of the path, similarly we don'tree store the right child info when going down
 	// the right child node. This is done as an optimization since the child info is going to be
 	// already stored in the next ProofInnerNode in PathToLeaf.
-	if bytes.Compare(key, node.key) < 0 {
+	if bytes.Compare(key, node.Key()) < 0 {
 		// left side
 		rightNode, err := node.getRightNode(tree)
 		if err != nil {

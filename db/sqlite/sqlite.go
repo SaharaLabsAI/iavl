@@ -1,4 +1,4 @@
-package iavl
+package sqlite
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cosmos/iavl/v2/db"
 	"github.com/cosmos/iavl/v2/metrics"
 )
 
@@ -285,6 +286,10 @@ func NewSqliteDb(pool *NodePool, opts SqliteDbOptions) (*SqliteDb, error) {
 	}
 
 	return sql, nil
+}
+
+func (sql *SqliteDb) Type() db.DBType {
+	return db.SQLITE
 }
 
 func (sql *SqliteDb) createShardTableIfNotExists(shardID int) error {

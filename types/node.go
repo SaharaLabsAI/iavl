@@ -1,4 +1,4 @@
-package iavl
+package types
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	encoding "github.com/cosmos/iavl/v2/internal"
+	"github.com/cosmos/iavl/v2/types"
 )
 
 const hashSize = 32
@@ -83,7 +84,7 @@ func (node *Node) checkValid() {
 	}
 }
 
-func (node *Node) isLeaf() bool {
+func (node *Node) IsLeaf() bool {
 	node.checkValid()
 	return node.subtreeHeight == 0
 }
@@ -736,7 +737,7 @@ func NewImportNode(key, value []byte, version int64, height int8) *Node {
 	}
 }
 
-func extractValue(buf []byte) ([]byte, error) {
+func (node *Node) ExtractValue(buf []byte) ([]byte, error) {
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)
 	if err != nil {
@@ -884,4 +885,63 @@ func (node *Node) SetKey(key []byte) {
 func (node *Node) SubTreeHeight() int8 {
 	node.checkValid()
 	return node.subtreeHeight
+}
+
+func (node *Node) LeftNode() *Node {
+	node.checkValid()
+	return node.leftNode
+}
+
+func (node *Node) RightNode() *Node {
+	node.checkValid()
+	return node.rightNode
+}
+
+func (node *Node) SetDirty(dirty bool) {
+	node.checkValid()
+	node.dirty = dirty
+}
+
+func (node *Node) Dirty() bool {
+	node.checkValid()
+	return node.dirty
+}
+
+func (node *Node) Evict() bool {
+	node.checkValid()
+	return node.evict
+}
+
+func (node *Node) PoolID() uint64 {
+	return node.poolID
+}
+
+func (node *Node) SetPoolID(id uint64) {
+	node.poolID = id
+}
+
+func (node *Node) Source() types.NodeSource {
+	return node.source
+}
+
+func (node *Node) SetSource(src types.NodeSource) {
+	node.source = src
+}
+
+func (node *Node) Reset() {
+	node.leftNodeKey = emptyNodeKey
+	node.rightNodeKey = emptyNodeKey
+	node.rightNode = nil
+	node.leftNode = nil
+	node.nodeKey = emptyNodeKey
+	node.hash = nil
+	node.key = nil
+	node.value = nil
+	node.subtreeHeight = -1
+	node.size = 0
+	node.dirty = false
+	node.evict = false
+	node.source = PoolNode
+
+	node.poolID = 0
 }

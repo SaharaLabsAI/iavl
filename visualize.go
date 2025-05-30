@@ -4,29 +4,31 @@ import (
 	"fmt"
 
 	"github.com/emicklei/dot"
+
+	"github.com/cosmos/iavl/v2/types"
 )
 
-func writeDotGraph(root *Node, lastGraph *dot.Graph) *dot.Graph {
+func writeDotGraph(root *types.Node, lastGraph *dot.Graph) *dot.Graph {
 	graph := dot.NewGraph(dot.Directed)
 
-	var traverse func(node *Node) dot.Node
+	var traverse func(node *types.Node) dot.Node
 	var i int
-	traverse = func(node *Node) dot.Node {
+	traverse = func(node *types.Node) dot.Node {
 		if node == nil {
 			return dot.Node{}
 		}
 		i++
-		nodeKey := fmt.Sprintf("%s-%d", node.key, node.subtreeHeight)
-		nodeLabel := fmt.Sprintf("%s - %d", string(node.key), node.subtreeHeight)
+		nodeKey := fmt.Sprintf("%s-%d", node.Key(), node.SubTreeHeight())
+		nodeLabel := fmt.Sprintf("%s - %d", string(node.Key()), node.SubTreeHeight())
 		n := graph.Node(nodeKey).Label(nodeLabel)
 		if _, found := lastGraph.FindNodeById(nodeKey); !found {
 			n.Attr("color", "red")
 		}
-		if node.isLeaf() {
+		if node.IsLeaf() {
 			return n
 		}
-		leftNode := traverse(node.leftNode)
-		rightNode := traverse(node.rightNode)
+		leftNode := traverse(node.LeftNode())
+		rightNode := traverse(node.RightNode())
 
 		leftEdge := n.Edge(leftNode, "l")
 		rightEdge := n.Edge(rightNode, "r")

@@ -1,4 +1,4 @@
-package iavl
+package logger
 
 import (
 	"log/slog"

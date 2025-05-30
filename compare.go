@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"sort"
+
+	"github.com/cosmos/iavl/v2/types"
 )
 
 type WrongVersionKey struct {
@@ -40,15 +42,15 @@ func (tree *Tree) Compare(other *Tree) error {
 	return err
 }
 
-func doCompare(tree1 *Tree, node1 *Node, tree2 *Tree, node2 *Node) (bool, error) {
-	if node1.isLeaf() {
-		if !bytes.Equal(node1.hash, node2.hash) {
+func doCompare(tree1 *Tree, node1 *types.Node, tree2 *Tree, node2 *types.Node) (bool, error) {
+	if node1.IsLeaf() {
+		if !bytes.Equal(node1.Hash(), node2.Hash()) {
 			return false, nil
 		}
 		return true, nil
 	}
 
-	if bytes.Equal(node1.hash, node2.hash) {
+	if bytes.Equal(node1.Hash(), node2.Hash()) {
 		return true, nil
 	}
 

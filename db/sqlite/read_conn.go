@@ -1,4 +1,4 @@
-package iavl
+package sqlite
 
 import (
 	"fmt"
@@ -6,6 +6,9 @@ import (
 
 	"github.com/eatonphil/gosqlite"
 	"lukechampine.com/blake3"
+
+	"github.com/cosmos/iavl/v2/logger"
+	"github.com/cosmos/iavl/v2/types"
 )
 
 type SqliteReadConn struct {
@@ -21,12 +24,12 @@ type SqliteReadConn struct {
 	opts *SqliteDbOptions
 
 	inUse  bool
-	logger Logger
+	logger logger.Logger
 
 	mu sync.RWMutex
 }
 
-func NewSqliteReadConn(conn *gosqlite.Conn, opts *SqliteDbOptions, logger Logger) *SqliteReadConn {
+func NewSqliteReadConn(conn *gosqlite.Conn, opts *SqliteDbOptions, logger logger.Logger) *SqliteReadConn {
 	return &SqliteReadConn{
 		conn:        conn,
 		treeVersion: 0,
@@ -36,7 +39,7 @@ func NewSqliteReadConn(conn *gosqlite.Conn, opts *SqliteDbOptions, logger Logger
 	}
 }
 
-func NewSqliteImmutableReadConn(treeVersion int64, opts *SqliteDbOptions, logger Logger) *SqliteReadConn {
+func NewSqliteImmutableReadConn(treeVersion int64, opts *SqliteDbOptions, logger logger.Logger) *SqliteReadConn {
 	return &SqliteReadConn{
 		treeVersion: treeVersion,
 		opts:        opts,
@@ -161,7 +164,7 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 		return nil, nil
 	}
 
-	return extractValue(nodeBz)
+	return &types.Node{}.ExtractValue(nodeBz)
 }
 
 func (c *SqliteReadConn) getLeaf(pool *NodePool, nodeKey NodeKey) (*Node, error) {

@@ -1,4 +1,4 @@
-package iavl
+package sqlite
 
 import (
 	"errors"

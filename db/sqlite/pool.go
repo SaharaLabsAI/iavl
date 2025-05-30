@@ -1,4 +1,4 @@
-package iavl
+package sqlite
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/eatonphil/gosqlite"
 
+	"github.com/cosmos/iavl/v2/logger"
 	"github.com/cosmos/iavl/v2/metrics"
 )
 
@@ -22,7 +23,7 @@ type SqliteReadonlyConnPool struct {
 	iters *IterPool
 
 	metrics metrics.Proxy
-	logger  Logger
+	logger  logger.Logger
 
 	mu sync.RWMutex
 }

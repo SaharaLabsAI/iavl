@@ -21,12 +21,6 @@ const (
 	leafSequenceStart = uint32(1 << 31)
 )
 
-var bufPool = &sync.Pool{
-	New: func() any {
-		return new(bytes.Buffer)
-	},
-}
-
 type nodeDelete struct {
 	// the sequence in which this deletion was processed
 	deleteKey NodeKey

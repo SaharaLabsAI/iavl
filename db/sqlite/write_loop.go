@@ -1,4 +1,4 @@
-package iavl
+package sqlite
 
 import (
 	"context"
@@ -12,6 +12,11 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
 	"golang.org/x/sys/unix"
+
+	"github.com/cosmos/iavl/v2/constants"
+	"github.com/cosmos/iavl/v2/logger"
+	"github.com/cosmos/iavl/v2/metrics"
+	"github.com/cosmos/iavl/v2/types"
 )
 
 const pruneBatchSize = 2000
@@ -21,8 +26,8 @@ type pruneSignal struct {
 }
 
 type saveSignal struct {
-	batch   *sqliteBatch
-	root    *Node
+	batch   *SqliteBatch
+	root    *types.Node
 	version int64
 }
 
@@ -32,8 +37,9 @@ type saveResult struct {
 }
 
 type sqlWriter struct {
-	sql    *SqliteDb
-	logger Logger
+	sql     *SqliteDb
+	logger  logger.Logger
+	metrics metrics.Proxy
 
 	awaitTreePruned chan struct{}
 	pausePruning    atomic.Bool
@@ -591,24 +597,26 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 	}
 }
 
-func (w *sqlWriter) saveTree(tree *Tree) error {
-	defer tree.metrics.MeasureSince(time.Now(), metricsNamespace, "db_write")
-	batch := &sqliteBatch{
-		sql:    tree.sql,
-		tree:   tree,
-		size:   200_000,
-		logger: w.sql.logger,
+func (w *sqlWriter) SaveTree(tree types.UpdatedTree) error {
+	defer w.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "db_write")
+
+	batch := &SqliteBatch{
+		sql:     tree.DB().(*SqliteDb),
+		tree:    tree,
+		size:    200_000,
+		logger:  w.sql.logger,
+		metrics: w.metrics,
 		// logger: log.With().
 		// 	Str("module", "sqlite-batch").
 		// 	Str("path", tree.sql.opts.Path).Logger(),
 	}
-	saveSig := &saveSignal{batch: batch, root: tree.root, version: tree.version.Load()}
+	saveSig := &saveSignal{batch: batch, root: tree.Root(), version: tree.Version()}
 	w.treeCh <- saveSig
 	w.leafCh <- saveSig
 	treeResult := <-w.treeResult
 	leafResult := <-w.leafResult
-	tree.metrics.IncrCounter(float32(batch.leafCount), metricsNamespace, "db_write_leaf")
-	tree.metrics.IncrCounter(float32(batch.treeCount), metricsNamespace, "db_write_branch")
+	w.metrics.IncrCounter(float32(batch.leafCount), constants.MetricsNamespace, "db_write_leaf")
+	w.metrics.IncrCounter(float32(batch.treeCount), constants.MetricsNamespace, "db_write_branch")
 
 	err := errors.Join(treeResult.err, leafResult.err)
 

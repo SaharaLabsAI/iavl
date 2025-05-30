@@ -340,7 +340,7 @@ func (sql *SqliteDb) createTableIfNotExists() error {
 		}
 
 		err = sql.treeWrite.Exec(`
-CREATE TABLE orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;
+CREATE TABLE branch_orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;
 CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob, PRIMARY KEY (version DESC)) WITHOUT ROWID`)
 		if err != nil {
 			return err
@@ -525,7 +525,7 @@ func (sql *SqliteDb) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.treeOrphan, err = sql.treeWrite.Prepare("INSERT OR REPLACE INTO orphan (version, sequence, at) VALUES (?, ?, ?)")
+	sql.treeOrphan, err = sql.treeWrite.Prepare("INSERT OR REPLACE INTO branch_orphan (version, sequence, at) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
 	}
@@ -1051,7 +1051,7 @@ func (sql *SqliteDb) Revert(version int64) error {
 	if err := sql.leafWrite.Exec("DELETE FROM leaf_orphan WHERE at > ?", version); err != nil {
 		return err
 	}
-	if err := sql.treeWrite.Exec("DELETE FROM orphan WHERE at > ?", version); err != nil {
+	if err := sql.treeWrite.Exec("DELETE FROM branch_orphan WHERE at > ?", version); err != nil {
 		return err
 	}
 

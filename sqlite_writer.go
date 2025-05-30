@@ -371,7 +371,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 
 	beginPruneBatch := func(version int64) (err error) {
 		if orphanQuery == nil {
-			orphanQuery, err = w.sql.treeWrite.Prepare("SELECT version, sequence, at FROM orphan WHERE at <= ?")
+			orphanQuery, err = w.sql.treeWrite.Prepare("SELECT version, sequence, at FROM branch_orphan WHERE at <= ?")
 			if err != nil {
 				return fmt.Errorf("failed to prepare orphan query; %w", err)
 			}
@@ -388,7 +388,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		}
 
 		if deleteOrphan == nil {
-			deleteOrphan, err = w.sql.treeWrite.Prepare("DELETE FROM orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
+			deleteOrphan, err = w.sql.treeWrite.Prepare("DELETE FROM branch_orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
 			if err != nil {
 				return fmt.Errorf("failed to prepare orphan delete; %w", err)
 			}
@@ -469,7 +469,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 				return fmt.Errorf("failed to delete from tree_%d count=%d; %w", shardID, pruneCount, err)
 			}
 			if err = deleteOrphan.Exec(at, version, sequence); err != nil {
-				return fmt.Errorf("failed to delete from orphan count=%d; %w", pruneCount, err)
+				return fmt.Errorf("failed to delete from branch_orphan count=%d; %w", pruneCount, err)
 			}
 			if pruneCount%pruneBatchSize == 0 {
 				if err = commitPrune(); err != nil {

@@ -571,11 +571,7 @@ func EncodeBytes(w io.Writer, bz []byte) error {
 	return err
 }
 
-// MakeNode constructs a *Node from an encoded byte slice.
-func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
-	decBuf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(decBuf)
-
+func decodeNode(nodeKey NodeKey, src []byte, dst *bytes.Buffer) ([]byte, error) {
 	var decoder compress.Decoder
 	if isLeafSeq(nodeKey.Sequence()) {
 		decoder = ipool.Compress{}.GetDecoder(compress.S2)
@@ -584,13 +580,37 @@ func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
 	}
 	defer ipool.Compress{}.PutDecoder(decoder)
 
-	decBuf.Reset()
-	decoder.Reset(bytes.NewBuffer(buf))
-	_, err := io.Copy(decBuf, decoder)
+	dst.Reset()
+	decoder.Reset(bytes.NewBuffer(src))
+	_, err := io.Copy(dst, decoder)
+	if err == nil {
+		return dst.Bytes(), nil
+	}
+
+	// For tree with single leaf, the leaf is used as root
+	ipool.Compress{}.PutDecoder(decoder)
+	decoder = ipool.Compress{}.GetDecoder(compress.ZSTD)
+
+	dst.Reset()
+	decoder.Reset(bytes.NewBuffer(src))
+	_, err = io.Copy(dst, decoder)
 	if err != nil {
 		return nil, err
 	}
-	buf = decBuf.Bytes()
+
+	return dst.Bytes(), nil
+}
+
+// MakeNode constructs a *Node from an encoded byte slice.
+func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
+	decBuf := bufPool.Get().(*bytes.Buffer)
+	defer bufPool.Put(decBuf)
+
+	var err error
+	buf, err = decodeNode(nodeKey, buf, decBuf)
+	if err != nil {
+		return nil, err
+	}
 
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)

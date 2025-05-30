@@ -13,9 +13,7 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cosmos/iavl/v2/compress"
 	"github.com/cosmos/iavl/v2/metrics"
-	"github.com/cosmos/iavl/v2/pool"
 )
 
 const defaultSQLitePath = "/tmp/iavl2"
@@ -831,22 +829,7 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 		if err != nil {
 			return err
 		}
-
-		compressBuf := bufPool.Get().(*bytes.Buffer)
-		defer bufPool.Put(compressBuf)
-
-		encoder := pool.Compress{}.GetEncoder(compress.ZSTD)
-		defer pool.Compress{}.PutEncoder(encoder)
-
-		compressBuf.Reset()
-		encoder.Reset(compressBuf)
-		if _, err := encoder.Write(buf.Bytes()); err != nil {
-			return err
-		}
-		if err := encoder.Close(); err != nil {
-			return err
-		}
-		bz := compressBuf.Bytes()
+		bz := buf.Bytes()
 
 		err = sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version, node_version, node_sequence, bytes) VALUES (?, ?, ?, ?)",
 			version, node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz)

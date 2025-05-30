@@ -12,9 +12,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/cosmos/iavl/v2/compress"
 	encoding "github.com/cosmos/iavl/v2/internal"
-	ipool "github.com/cosmos/iavl/v2/pool"
 )
 
 const hashSize = 32
@@ -571,47 +569,8 @@ func EncodeBytes(w io.Writer, bz []byte) error {
 	return err
 }
 
-func decodeNode(nodeKey NodeKey, src []byte, dst *bytes.Buffer) ([]byte, error) {
-	var decoder compress.Decoder
-	if isLeafSeq(nodeKey.Sequence()) {
-		decoder = ipool.Compress{}.GetDecoder(compress.S2)
-	} else {
-		decoder = ipool.Compress{}.GetDecoder(compress.ZSTD)
-	}
-	defer ipool.Compress{}.PutDecoder(decoder)
-
-	dst.Reset()
-	decoder.Reset(bytes.NewBuffer(src))
-	_, err := io.Copy(dst, decoder)
-	if err == nil {
-		return dst.Bytes(), nil
-	}
-
-	// For tree with single leaf, the leaf is used as root
-	ipool.Compress{}.PutDecoder(decoder)
-	decoder = ipool.Compress{}.GetDecoder(compress.ZSTD)
-
-	dst.Reset()
-	decoder.Reset(bytes.NewBuffer(src))
-	_, err = io.Copy(dst, decoder)
-	if err != nil {
-		return nil, err
-	}
-
-	return dst.Bytes(), nil
-}
-
 // MakeNode constructs a *Node from an encoded byte slice.
 func MakeNode(pool *NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
-	decBuf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(decBuf)
-
-	var err error
-	buf, err = decodeNode(nodeKey, buf, decBuf)
-	if err != nil {
-		return nil, err
-	}
-
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)
 	if err != nil {
@@ -778,20 +737,6 @@ func NewImportNode(key, value []byte, version int64, height int8) *Node {
 }
 
 func extractValue(buf []byte) ([]byte, error) {
-	decBuf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(decBuf)
-
-	decoder := ipool.Compress{}.GetDecoder(compress.S2)
-	defer ipool.Compress{}.PutDecoder(decoder)
-
-	decBuf.Reset()
-	decoder.Reset(bytes.NewBuffer(buf))
-	_, err := io.Copy(decBuf, decoder)
-	if err != nil {
-		return nil, err
-	}
-	buf = decBuf.Bytes()
-
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)
 	if err != nil {

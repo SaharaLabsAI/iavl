@@ -14,9 +14,6 @@ import (
 	"github.com/eatonphil/gosqlite"
 	api "github.com/kocubinski/costor-api"
 	"github.com/kocubinski/costor-api/logz"
-
-	"github.com/cosmos/iavl/v2/compress"
-	"github.com/cosmos/iavl/v2/pool"
 )
 
 type sqliteSnapshot struct {
@@ -191,19 +188,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 			if err != nil {
 				return nil, err
 			}
-
-			encoder := pool.Compress{}.GetEncoder(compress.S2)
-			defer pool.Compress{}.PutEncoder(encoder)
-
-			compressBuf.Reset()
-			encoder.Reset(compressBuf)
-			if _, err := encoder.Write(buf.Bytes()); err != nil {
-				return nil, err
-			}
-			if err := encoder.Close(); err != nil {
-				return nil, err
-			}
-			nodeBz := compressBuf.Bytes()
+			nodeBz := buf.Bytes()
 
 			if err = insert.Exec(ordinal, snapshotNode.Version, ordinal, nodeBz); err != nil {
 				return nil, err
@@ -235,19 +220,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 		if err != nil {
 			return nil, err
 		}
-
-		encoder := pool.Compress{}.GetEncoder(compress.ZSTD)
-		defer pool.Compress{}.PutEncoder(encoder)
-
-		compressBuf.Reset()
-		encoder.Reset(compressBuf)
-		if _, err := encoder.Write(buf.Bytes()); err != nil {
-			return nil, err
-		}
-		if err := encoder.Close(); err != nil {
-			return nil, err
-		}
-		nodeBz := compressBuf.Bytes()
+		nodeBz := buf.Bytes()
 
 		if err = insert.Exec(ordinal, snapshotNode.Version, ordinal, nodeBz); err != nil {
 			return nil, err
@@ -480,24 +453,7 @@ func (snap *sqliteSnapshot) writeStep(node *Node) error {
 	if err != nil {
 		return err
 	}
-
-	var encoder compress.Encoder
-	if node.isLeaf() {
-		encoder = pool.Compress{}.GetEncoder(compress.S2)
-	} else {
-		encoder = pool.Compress{}.GetEncoder(compress.ZSTD)
-	}
-	defer pool.Compress{}.PutEncoder(encoder)
-
-	compressBuf.Reset()
-	encoder.Reset(compressBuf)
-	if _, err := encoder.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	if err := encoder.Close(); err != nil {
-		return err
-	}
-	nodeBz := compressBuf.Bytes()
+	nodeBz := buf.Bytes()
 
 	err = snap.snapshotInsert.Exec(snap.ordinal, node.nodeKey.Version(), int(node.nodeKey.Sequence()), nodeBz)
 	if err != nil {
@@ -757,24 +713,7 @@ func (snap *sqliteSnapshot) writeSnapNode(node *Node, version int64, ordinal, se
 	if err != nil {
 		return err
 	}
-
-	var encoder compress.Encoder
-	if node.isLeaf() {
-		encoder = pool.Compress{}.GetEncoder(compress.S2)
-	} else {
-		encoder = pool.Compress{}.GetEncoder(compress.ZSTD)
-	}
-	defer pool.Compress{}.PutEncoder(encoder)
-
-	compressBuf.Reset()
-	encoder.Reset(compressBuf)
-	if _, err := encoder.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	if err := encoder.Close(); err != nil {
-		return err
-	}
-	nodeBz := compressBuf.Bytes()
+	nodeBz := buf.Bytes()
 
 	if err = snap.snapshotInsert.Exec(ordinal, version, sequence, nodeBz); err != nil {
 		return err

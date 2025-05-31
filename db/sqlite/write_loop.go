@@ -36,7 +36,7 @@ type saveResult struct {
 	err error
 }
 
-type sqlWriter struct {
+type SqlWriter struct {
 	sql     *SqliteDb
 	logger  logger.Logger
 	metrics metrics.Proxy
@@ -56,8 +56,8 @@ type sqlWriter struct {
 	leafStopCh chan struct{}
 }
 
-func (sql *SqliteDb) newSQLWriter() *sqlWriter {
-	writer := &sqlWriter{
+func (sql *SqliteDb) NewSqlWriter() *SqlWriter {
+	writer := &SqlWriter{
 		sql:         sql,
 		leafPruneCh: make(chan *pruneSignal),
 		treePruneCh: make(chan *pruneSignal),
@@ -76,7 +76,7 @@ func (sql *SqliteDb) newSQLWriter() *sqlWriter {
 	return writer
 }
 
-func (w *sqlWriter) start(ctx context.Context) {
+func (w *SqlWriter) start(ctx context.Context) {
 	treeStarted := make(chan struct{})
 	leafStarted := make(chan struct{})
 
@@ -109,12 +109,12 @@ func (w *sqlWriter) start(ctx context.Context) {
 	<-leafStarted
 }
 
-func (w *sqlWriter) awaitStop() {
+func (w *SqlWriter) awaitStop() {
 	<-w.leafStopCh
 	<-w.treeStopCh
 }
 
-func (w *sqlWriter) leafLoop(ctx context.Context) error {
+func (w *SqlWriter) leafLoop(ctx context.Context) error {
 	var (
 		pruneVersion     int64
 		nextPruneVersion int64
@@ -342,7 +342,7 @@ func (w *sqlWriter) leafLoop(ctx context.Context) error {
 	}
 }
 
-func (w *sqlWriter) treeLoop(ctx context.Context) error {
+func (w *SqlWriter) treeLoop(ctx context.Context) error {
 	var (
 		nextPruneVersion int64
 		pruneVersion     int64
@@ -597,7 +597,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 	}
 }
 
-func (w *sqlWriter) SaveTree(tree types.UpdatedTree) error {
+func (w *SqlWriter) SaveTree(tree types.UpdatedTree) error {
 	defer w.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "db_write")
 
 	batch := &SqliteBatch{

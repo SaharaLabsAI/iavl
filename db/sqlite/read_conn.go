@@ -8,7 +8,8 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/cosmos/iavl/v2/logger"
-	"github.com/cosmos/iavl/v2/types"
+	nodepool "github.com/cosmos/iavl/v2/pool/node"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 type SqliteReadConn struct {
@@ -164,10 +165,10 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 		return nil, nil
 	}
 
-	return &types.Node{}.ExtractValue(nodeBz)
+	return nodetypes.DecodeValueOnly(nodeBz)
 }
 
-func (c *SqliteReadConn) getLeaf(pool *NodePool, nodeKey NodeKey) (*Node, error) {
+func (c *SqliteReadConn) getLeaf(pool *nodepool.NodePool, nodeKey nodetypes.NodeKey) (*nodetypes.Node, error) {
 	defer c.MarkIdle()
 
 	var err error
@@ -197,7 +198,7 @@ func (c *SqliteReadConn) getLeaf(pool *NodePool, nodeKey NodeKey) (*Node, error)
 		return nil, err
 	}
 
-	node, err := MakeNode(pool, nodeKey, nodeBz)
+	node, err := nodetypes.Decode(pool, nodeKey, nodeBz)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +206,7 @@ func (c *SqliteReadConn) getLeaf(pool *NodePool, nodeKey NodeKey) (*Node, error)
 	return node, nil
 }
 
-func (c *SqliteReadConn) getNode(pool *NodePool, nodeKey NodeKey) (*Node, error) {
+func (c *SqliteReadConn) getNode(pool *nodepool.NodePool, nodeKey nodetypes.NodeKey) (*nodetypes.Node, error) {
 	defer c.MarkIdle()
 
 	var err error
@@ -238,7 +239,7 @@ func (c *SqliteReadConn) getNode(pool *NodePool, nodeKey NodeKey) (*Node, error)
 		return nil, err
 	}
 
-	node, err := MakeNode(pool, nodeKey, nodeBz)
+	node, err := nodetypes.Decode(pool, nodeKey, nodeBz)
 	if err != nil {
 		return nil, err
 	}

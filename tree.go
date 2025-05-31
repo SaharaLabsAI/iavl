@@ -13,35 +13,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cosmos/iavl/v2/db/sqlite"
 	"github.com/cosmos/iavl/v2/metrics"
+	"github.com/cosmos/iavl/v2/pool"
+	"github.com/cosmos/iavl/v2/types"
 )
-
-const (
-	metricsNamespace  = "iavl2"
-	leafSequenceStart = uint32(1 << 31)
-)
-
-type nodeDelete struct {
-	// the sequence in which this deletion was processed
-	deleteKey NodeKey
-	// the leaf key to delete in `latest` table (if maintained)
-	leafKey []byte
-}
-
-type nodeLoadTask struct {
-	parentNode *Node
-	isLeft     bool // true for left child, false for right child
-	nodeKey    NodeKey
-}
 
 type Tree struct {
 	version      atomic.Int64
-	root         *Node
+	root         *types.Node
 	metrics      metrics.Proxy
-	sql          *SqliteDb
-	sqlWriter    *sqlWriter
+	sql          *sqlite.SqliteDb
+	sqlWriter    *sqlite.SqlWriter
 	writerCancel context.CancelFunc
-	pool         *NodePool
+	pool         *pool.NodePool
 
 	// options
 	maxWorkingSize uint64
@@ -51,11 +36,7 @@ type Tree struct {
 	metricsProxy   metrics.Proxy
 
 	// state
-	branches       []*Node
-	leaves         []*Node
-	branchOrphans  []NodeKey
-	leafOrphans    []NodeKey
-	deletes        []*nodeDelete
+	updates        types.NodeUpdates
 	leafSequence   uint32
 	branchSequence uint32
 	isReplaying    bool
@@ -85,6 +66,12 @@ func DefaultTreeOptions() TreeOptions {
 	}
 }
 
+type nodeLoadTask struct {
+	parentNode *types.Node
+	isLeft     bool // true for left child, false for right child
+	nodeKey    types.NodeKey
+}
+
 var loadTaskPool = &sync.Pool{
 	New: func() any {
 		return make([]nodeLoadTask, 0, 64) // Pre-allocate with reasonable capacity
@@ -93,15 +80,15 @@ var loadTaskPool = &sync.Pool{
 
 var nodeSlicePool = &sync.Pool{
 	New: func() any {
-		return make([]*Node, 0, 1024)
+		return make([]*types.Node, 0, 1024)
 	},
 }
 
 type CompactNodeBatch struct {
-	nodes     []*Node
+	nodes     []*types.Node
 	parentIdx []int32
 	isLeft    []bool
-	nodeKeys  []NodeKey
+	nodeKeys  []types.NodeKey
 }
 
 func (cnb *CompactNodeBatch) reset() {
@@ -111,7 +98,7 @@ func (cnb *CompactNodeBatch) reset() {
 	cnb.nodeKeys = cnb.nodeKeys[:0]
 }
 
-func (cnb *CompactNodeBatch) add(node *Node, parent int32, left bool, key NodeKey) {
+func (cnb *CompactNodeBatch) add(node *types.Node, parent int32, left bool, key types.NodeKey) {
 	cnb.nodes = append(cnb.nodes, node)
 	cnb.parentIdx = append(cnb.parentIdx, parent)
 	cnb.isLeft = append(cnb.isLeft, left)
@@ -121,16 +108,16 @@ func (cnb *CompactNodeBatch) add(node *Node, parent int32, left bool, key NodeKe
 var compactBatchPool = &sync.Pool{
 	New: func() any {
 		return &CompactNodeBatch{
-			nodes:     make([]*Node, 0, 256),
+			nodes:     make([]*types.Node, 0, 256),
 			parentIdx: make([]int32, 0, 256),
 			isLeft:    make([]bool, 0, 256),
-			nodeKeys:  make([]NodeKey, 0, 256),
+			nodeKeys:  make([]types.NodeKey, 0, 256),
 		}
 	},
 }
 
 // estimateCapacity uses subtree height for better memory pre-allocation
-func (tree *Tree) estimateCapacity(rootNode *Node) (int, int) {
+func (tree *Tree) estimateCapacity(rootNode *types.Node) (int, int) {
 	if rootNode == nil {
 		return 64, 32
 	}
@@ -173,7 +160,7 @@ func (tree *Tree) optimizedWorkerCount(workload int) int {
 	return min(16, cpuCount*2) // For large workloads
 }
 
-func NewTree(sql *SqliteDb, pool *NodePool, opts TreeOptions) *Tree {
+func NewTree(sql *sqlite.SqliteDb, pool *pool.NodePool, opts TreeOptions) *Tree {
 	ctx, cancel := context.WithCancel(context.Background())
 	if sql != nil {
 		sql.useReadPool = false
@@ -181,7 +168,7 @@ func NewTree(sql *SqliteDb, pool *NodePool, opts TreeOptions) *Tree {
 
 	tree := &Tree{
 		sql:            sql,
-		sqlWriter:      sql.newSQLWriter(),
+		sqlWriter:      sql.NewSqlWriter(),
 		writerCancel:   cancel,
 		pool:           pool,
 		metrics:        opts.MetricsProxy,
@@ -526,7 +513,7 @@ func (tree *Tree) deepHashParallel(node *Node, depth int8) {
 		leafWorkers = max(1, min(leafWorkers, 6)) // Cap at 6 workers, min 1
 
 		if leafWorkers > 1 && len(allLeaves) > 2 { // Much lower threshold
-			leafChan := make(chan *Node, min(len(allLeaves), 50))
+			leafChan := make(chan *types.Node, min(len(allLeaves), 50))
 
 			go func() {
 				defer close(leafChan)
@@ -541,32 +528,32 @@ func (tree *Tree) deepHashParallel(node *Node, depth int8) {
 				go func() {
 					defer leafWg.Done()
 
-					h := hashPool.Get().(hash.Hash)
-					defer hashPool.Put(h)
+					h := pool.Sha256Pool.Get().(hash.Hash)
+					defer pool.Sha256Pool.Put(h)
 
-					buf := bufPool.Get().(*bytes.Buffer)
-					defer bufPool.Put(buf)
+					buf := pool.BufPool.Get().(*bytes.Buffer)
+					defer pool.BufPool.Put(buf)
 
 					for leaf := range leafChan {
 						h.Reset()
 						buf.Reset()
-						leaf._hashWith(h, buf)
+						leaf.HashWith(h, buf)
 					}
 				}()
 			}
 			leafWg.Wait()
 		} else {
 			// Sequential for very small workloads
-			h := hashPool.Get().(hash.Hash)
-			defer hashPool.Put(h)
+			h := pool.Sha256Pool.Get().(hash.Hash)
+			defer pool.Sha256Pool.Put(h)
 
-			buf := bufPool.Get().(*bytes.Buffer)
-			defer bufPool.Put(buf)
+			buf := pool.BufPool.Get().(*bytes.Buffer)
+			defer pool.BufPool.Put(buf)
 
 			for _, leaf := range allLeaves {
 				h.Reset()
 				buf.Reset()
-				leaf._hashWith(h, buf)
+				leaf.HashWith(h, buf)
 			}
 		}
 	}
@@ -622,17 +609,17 @@ func (tree *Tree) deepHashParallel(node *Node, depth int8) {
 							if branch.leftNode != nil && branch.leftNode.hash == nil {
 								h.Reset()
 								buf.Reset()
-								branch.leftNode._hashWith(h, buf)
+								branch.leftNode.HashWith(h, buf)
 							}
 							if branch.rightNode != nil && branch.rightNode.hash == nil {
 								h.Reset()
 								buf.Reset()
-								branch.rightNode._hashWith(h, buf)
+								branch.rightNode.HashWith(h, buf)
 							}
 
 							h.Reset()
 							buf.Reset()
-							branch._hashWith(h, buf)
+							branch.HashWith(h, buf)
 						}
 					}()
 				}
@@ -648,17 +635,17 @@ func (tree *Tree) deepHashParallel(node *Node, depth int8) {
 					if branch.leftNode != nil && branch.leftNode.hash == nil {
 						h.Reset()
 						buf.Reset()
-						branch.leftNode._hashWith(h, buf)
+						branch.leftNode.HashWith(h, buf)
 					}
 					if branch.rightNode != nil && branch.rightNode.hash == nil {
 						h.Reset()
 						buf.Reset()
-						branch.rightNode._hashWith(h, buf)
+						branch.rightNode.HashWith(h, buf)
 					}
 
 					h.Reset()
 					buf.Reset()
-					branch._hashWith(h, buf)
+					branch.HashWith(h, buf)
 				}
 			}
 		}
@@ -1619,7 +1606,7 @@ func (tree *Tree) returnNode(node *Node) {
 		return
 	}
 
-	node.checkValid()
+	node.CheckValid()
 
 	// Make sure node is not the tree's root before recycling
 	if node == tree.root {

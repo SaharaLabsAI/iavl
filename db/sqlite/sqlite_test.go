@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 
-	"github.com/cosmos/iavl/v2/pool"
+	nodepool "github.com/cosmos/iavl/v2/pool/node"
 	"github.com/cosmos/iavl/v2/testutil"
 )
 
@@ -18,7 +18,7 @@ func TestBuildSqlite(t *testing.T) {
 	dir := t.TempDir()
 	t.Logf("dir: %s", dir)
 
-	sql, err := NewSqliteDb(pool.NewNodePool(), SqliteDbOptions{Path: dir})
+	sql, err := NewSqliteDb(nodepool.NewNodePool(), SqliteDbOptions{Path: dir})
 
 	require.NoError(t, err)
 

@@ -13,8 +13,14 @@ import (
 	api "github.com/kocubinski/costor-api"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cosmos/iavl/v2/constants"
 	"github.com/cosmos/iavl/v2/db"
+	"github.com/cosmos/iavl/v2/logger"
 	"github.com/cosmos/iavl/v2/metrics"
+	"github.com/cosmos/iavl/v2/pool"
+	nodepool "github.com/cosmos/iavl/v2/pool/node"
+	"github.com/cosmos/iavl/v2/types"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 const defaultSQLitePath = "/tmp/iavl2"
@@ -54,7 +60,7 @@ type SqliteDbOptions struct {
 	ThreadsCount   int
 	StatementCache int
 
-	Logger  Logger
+	Logger  logger.Logger
 	Metrics metrics.Proxy
 
 	walPages int
@@ -65,7 +71,7 @@ type SqliteDbOptions struct {
 type SqliteDb struct {
 	opts SqliteDbOptions
 
-	pool *NodePool
+	nodePool *nodepool.NodePool
 
 	// 2 separate databases and 2 separate connections.  the underlying databases have different WAL policies
 	// therefore separation is required.
@@ -80,7 +86,7 @@ type SqliteDb struct {
 	hashPool []*SqliteReadConn
 
 	metrics metrics.Proxy
-	logger  Logger
+	logger  logger.Logger
 
 	useReadPool bool
 
@@ -150,7 +156,7 @@ func defaultSqliteDbOptions(opts SqliteDbOptions) SqliteDbOptions {
 	}
 
 	if opts.Logger == nil {
-		opts.Logger = NewNopLogger()
+		opts.Logger = logger.NewNopLogger()
 	}
 
 	return opts
@@ -224,20 +230,20 @@ func (opts SqliteDbOptions) EstimateMmapSize() (uint64, error) {
 	return mmapSize, nil
 }
 
-func NewInMemorySqliteDb(pool *NodePool) (*SqliteDb, error) {
+func NewInMemorySqliteDb(pool *nodepool.NodePool) (*SqliteDb, error) {
 	opts := defaultSqliteDbOptions(SqliteDbOptions{ConnArgs: "mode=memory&cache=shared"})
 	return NewSqliteDb(pool, opts)
 }
 
-func NewSqliteDb(pool *NodePool, opts SqliteDbOptions) (*SqliteDb, error) {
+func NewSqliteDb(pool *nodepool.NodePool, opts SqliteDbOptions) (*SqliteDb, error) {
 	var err error
 	opts = defaultSqliteDbOptions(opts)
 
 	sql := &SqliteDb{
-		opts:    opts,
-		pool:    pool,
-		metrics: opts.Metrics,
-		logger:  opts.Logger,
+		opts:     opts,
+		nodePool: pool,
+		metrics:  opts.Metrics,
+		logger:   opts.Logger,
 	}
 
 	if !api.IsFileExistent(opts.Path) {
@@ -725,12 +731,12 @@ func (sql *SqliteDb) returnHashConns(conns []*SqliteReadConn) {
 	}
 }
 
-func (sql *SqliteDb) getLeaf(nodeKey NodeKey) (*Node, error) {
+func (sql *SqliteDb) getLeaf(nodeKey nodetypes.NodeKey) (*nodetypes.Node, error) {
 	// Fallback to old method for backward compatibility
 	start := time.Now()
 	defer func() {
-		sql.metrics.MeasureSince(start, metricsNamespace, "db_get")
-		sql.metrics.IncrCounter(1, metricsNamespace, "db_get_leaf")
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get")
+		sql.metrics.IncrCounter(1, constants.MetricsNamespace, "db_get_leaf")
 	}()
 
 	conn, err := sql.getReadConn()
@@ -738,14 +744,14 @@ func (sql *SqliteDb) getLeaf(nodeKey NodeKey) (*Node, error) {
 		return nil, err
 	}
 
-	return conn.getLeaf(sql.pool, nodeKey)
+	return conn.getLeaf(sql.nodePool, nodeKey)
 }
 
-func (sql *SqliteDb) getNode(nodeKey NodeKey) (*Node, error) {
+func (sql *SqliteDb) getNode(nodeKey nodetypes.NodeKey) (*nodetypes.Node, error) {
 	start := time.Now()
 	defer func() {
-		sql.metrics.MeasureSince(start, metricsNamespace, "db_get")
-		sql.metrics.IncrCounter(1, metricsNamespace, "db_get_branch")
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get")
+		sql.metrics.IncrCounter(1, constants.MetricsNamespace, "db_get_branch")
 	}()
 
 	conn, err := sql.getReadConn()
@@ -753,7 +759,7 @@ func (sql *SqliteDb) getNode(nodeKey NodeKey) (*Node, error) {
 		return nil, err
 	}
 
-	return conn.getNode(sql.pool, nodeKey)
+	return conn.getNode(sql.nodePool, nodeKey)
 }
 
 func (sql *SqliteDb) Close() error {
@@ -817,27 +823,27 @@ func (sql *SqliteDb) Close() error {
 		}
 	}
 
-	if sql.pool != nil {
-		sql.pool = nil
+	if sql.nodePool != nil {
+		sql.nodePool = nil
 	}
 
 	return nil
 }
 
-func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
+func (sql *SqliteDb) SaveRoot(version int64, node *nodetypes.Node) error {
 	if node != nil {
-		buf := bufPool.Get().(*bytes.Buffer)
+		buf := pool.BufPool.Get().(*bytes.Buffer)
 		buf.Reset()
-		defer bufPool.Put(buf)
+		defer pool.BufPool.Put(buf)
 
-		err := node.BytesWithBuffer(buf)
+		err := node.EncodeWithBuffer(buf)
 		if err != nil {
 			return err
 		}
 		bz := buf.Bytes()
 
 		err = sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version, node_version, node_sequence, bytes) VALUES (?, ?, ?, ?)",
-			version, node.nodeKey.Version(), int(node.nodeKey.Sequence()), bz)
+			version, node.NodeKey().Version(), int(node.NodeKey().Sequence()), bz)
 		if err != nil {
 			return err
 		}
@@ -848,7 +854,7 @@ func (sql *SqliteDb) SaveRoot(version int64, node *Node) error {
 	return sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version) VALUES (?)", version)
 }
 
-func (sql *SqliteDb) LoadRoot(version int64) (*Node, error) {
+func (sql *SqliteDb) LoadRoot(version int64) (*nodetypes.Node, error) {
 	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return nil, err
@@ -879,10 +885,10 @@ func (sql *SqliteDb) LoadRoot(version int64) (*Node, error) {
 	}
 
 	// if nodeBz is nil then a (valid) empty tree was saved, which a nil root represents
-	var root *Node
+	var root *nodetypes.Node
 	if nodeBz != nil {
-		rootKey := NewNodeKey(nodeVersion, uint32(nodeSeq))
-		root, err = MakeNode(sql.pool, rootKey, nodeBz)
+		rootKey := nodetypes.NewNodeKey(nodeVersion, uint32(nodeSeq))
+		root, err = nodetypes.Decode(sql.nodePool, rootKey, nodeBz)
 		if err != nil {
 			return nil, err
 		}
@@ -967,48 +973,54 @@ func (sql *SqliteDb) WarmLeaves() error {
 	return stmt.Close()
 }
 
-func isLeafSeq(seq uint32) bool {
-	return seq&(1<<31) != 0
-}
-
-func (sql *SqliteDb) getRightNode(node *Node) (*Node, error) {
-	if node.isLeaf() {
+func (sql *SqliteDb) getRightNode(node *types.Node) (*types.Node, error) {
+	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no children")
 	}
-	var err error
-	if isLeafSeq(node.rightNodeKey.Sequence()) {
-		node.rightNode, err = sql.getLeaf(node.rightNodeKey)
+
+	var (
+		rightNode *types.Node
+		err       error
+	)
+
+	if constants.IsLeafSeq(node.RightNodeKey().Sequence()) {
+		rightNode, err = sql.getLeaf(*node.RightNodeKey())
 	} else {
-		node.rightNode, err = sql.getNode(node.rightNodeKey)
-	}
-	if node.rightNode == nil {
-		err = errors.New("not found")
+		rightNode, err = sql.getNode(*node.RightNodeKey())
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get right node node_key=%s height=%d path=%s: %w",
-			node.rightNodeKey, node.subtreeHeight, sql.opts.Path, err)
+			node.RightNodeKey(), node.SubTreeHeight(), sql.opts.Path, err)
 	}
-	return node.rightNode, nil
+
+	node.SetRightNode(rightNode)
+
+	return node.RightNode(), nil
 }
 
-func (sql *SqliteDb) getLeftNode(node *Node) (*Node, error) {
-	if node.isLeaf() {
+func (sql *SqliteDb) getLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
+	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no children")
 	}
-	var err error
-	if isLeafSeq(node.leftNodeKey.Sequence()) {
-		node.leftNode, err = sql.getLeaf(node.leftNodeKey)
+
+	var (
+		leftNode *nodetypes.Node
+		err      error
+	)
+
+	if constants.IsLeafSeq(node.LeftNodeKey().Sequence()) {
+		leftNode, err = sql.getLeaf(*node.LeftNodeKey())
 	} else {
-		node.leftNode, err = sql.getNode(node.leftNodeKey)
-	}
-	if node.leftNode == nil {
-		err = errors.New("not found")
+		leftNode, err = sql.getNode(*node.LeftNodeKey())
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get left node node_key=%s height=%d path=%s: %w",
-			node.leftNodeKey, node.subtreeHeight, sql.opts.Path, err)
+			node.LeftNodeKey(), node.SubTreeHeight(), sql.opts.Path, err)
 	}
-	return node.leftNode, nil
+
+	node.SetLeftNode(leftNode)
+
+	return node.LeftNode(), nil
 }
 
 func (sql *SqliteDb) isSharded() (bool, error) {
@@ -1073,109 +1085,111 @@ func (sql *SqliteDb) closeHangingIterators() error {
 	return nil
 }
 
-func (sql *SqliteDb) replayChangelog(tree *Tree, toVersion int64, targetHash []byte) error {
-	var (
-		version     int
-		lastVersion int
-		sequence    int
-		bz          []byte
-		key         []byte
-		count       int64
-		start       = time.Now()
-		since       = time.Now()
-		logPath     = []interface{}{"path", sql.opts.Path}
-	)
-	tree.isReplaying = true
-	defer func() {
-		tree.isReplaying = false
-	}()
+// FIXME:
+// TODO:
+// func (sql *SqliteDb) replayChangelog(tree *Tree, toVersion int64, targetHash []byte) error {
+// 	var (
+// 		version     int
+// 		lastVersion int
+// 		sequence    int
+// 		bz          []byte
+// 		key         []byte
+// 		count       int64
+// 		start       = time.Now()
+// 		since       = time.Now()
+// 		logPath     = []interface{}{"path", sql.opts.Path}
+// 	)
+// 	tree.isReplaying = true
+// 	defer func() {
+// 		tree.isReplaying = false
+// 	}()
+//
+// 	sql.opts.Logger.Info(fmt.Sprintf("replaying changelog from=%d to=%d", tree.version.Load(), toVersion), logPath...)
+//
+// 	var q *gosqlite.Stmt
+// 	var conn *SqliteReadConn
+// 	var err error
+//
+// 	conn, err = sql.getReadConn()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer conn.MarkIdle()
+//
+// 	q, err = conn.Prepare(`SELECT * FROM (
+// 			SELECT version, sequence, key_hash, bytes
+// 		FROM leaf WHERE version > ? AND version <= ?
+// 		) as ops
+// 		ORDER BY version, sequence`)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer q.Reset()
+//
+// 	if err = q.Bind(tree.version.Load(), toVersion); err != nil {
+// 		return err
+// 	}
+//
+// 	for {
+// 		ok, err := q.Step()
+// 		if err != nil {
+// 			return err
+// 		}
+// 		if !ok {
+// 			break
+// 		}
+// 		count++
+// 		if err = q.Scan(&version, &sequence, &key, &bz); err != nil {
+// 			return err
+// 		}
+// 		if version-1 != lastVersion {
+// 			tree.leaves, tree.branches, tree.leafOrphans, tree.deletes = nil, nil, nil, nil
+// 			tree.version.Store(int64(version - 1))
+// 			tree.resetSequences()
+// 			lastVersion = version - 1
+// 		}
+// 		if bz != nil {
+// 			nk := nodetypes.NewNodeKey(0, 0)
+// 			node, err := nodetypes.Decode(tree.pool, nk, bz)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			if _, err = tree.Set(node.key, node.hash); err != nil {
+// 				return err
+// 			}
+// 			if sequence != int(tree.leafSequence) {
+// 				return fmt.Errorf("sequence mismatch version=%d; expected %d got %d; path=%s",
+// 					version, sequence, tree.leafSequence, sql.opts.Path)
+// 			}
+// 		} else {
+// 			if _, _, err = tree.Remove(key); err != nil {
+// 				return err
+// 			}
+// 			deleteSequence := tree.deletes[len(tree.deletes)-1].deleteKey.Sequence()
+// 			if sequence != int(deleteSequence) {
+// 				return fmt.Errorf("sequence delete mismatch; version=%d expected %d got %d; path=%s",
+// 					version, sequence, tree.leafSequence, sql.opts.Path)
+// 			}
+// 		}
+// 		if count%250_000 == 0 {
+// 			sql.opts.Logger.Info(fmt.Sprintf("replayed changelog to version=%d count=%s node/s=%s",
+// 				version, humanize.Comma(count), humanize.Comma(int64(250_000/time.Since(since).Seconds()))), logPath)
+// 			since = time.Now()
+// 		}
+// 	}
+// 	rootHash := tree.computeHash()
+// 	if !bytes.Equal(targetHash, rootHash) {
+// 		return fmt.Errorf("root hash mismatch; expected %x got %x", targetHash, rootHash)
+// 	}
+// 	tree.leaves, tree.branches, tree.leafOrphans, tree.deletes = nil, nil, nil, nil
+// 	tree.resetSequences()
+// 	tree.version.Store(toVersion)
+// 	sql.opts.Logger.Info(fmt.Sprintf("replayed changelog to version=%d count=%s dur=%s root=%v",
+// 		tree.version.Load(), humanize.Comma(count), time.Since(start).Round(time.Millisecond), tree.root), logPath)
+// 	return q.Close()
+// }
 
-	sql.opts.Logger.Info(fmt.Sprintf("replaying changelog from=%d to=%d", tree.version.Load(), toVersion), logPath...)
-
-	var q *gosqlite.Stmt
-	var conn *SqliteReadConn
-	var err error
-
-	conn, err = sql.getReadConn()
-	if err != nil {
-		return err
-	}
-	defer conn.MarkIdle()
-
-	q, err = conn.Prepare(`SELECT * FROM (
-			SELECT version, sequence, key_hash, bytes
-		FROM leaf WHERE version > ? AND version <= ?
-		) as ops
-		ORDER BY version, sequence`)
-	if err != nil {
-		return err
-	}
-	defer q.Reset()
-
-	if err = q.Bind(tree.version.Load(), toVersion); err != nil {
-		return err
-	}
-
-	for {
-		ok, err := q.Step()
-		if err != nil {
-			return err
-		}
-		if !ok {
-			break
-		}
-		count++
-		if err = q.Scan(&version, &sequence, &key, &bz); err != nil {
-			return err
-		}
-		if version-1 != lastVersion {
-			tree.leaves, tree.branches, tree.leafOrphans, tree.deletes = nil, nil, nil, nil
-			tree.version.Store(int64(version - 1))
-			tree.resetSequences()
-			lastVersion = version - 1
-		}
-		if bz != nil {
-			nk := NewNodeKey(0, 0)
-			node, err := MakeNode(tree.pool, nk, bz)
-			if err != nil {
-				return err
-			}
-			if _, err = tree.Set(node.key, node.hash); err != nil {
-				return err
-			}
-			if sequence != int(tree.leafSequence) {
-				return fmt.Errorf("sequence mismatch version=%d; expected %d got %d; path=%s",
-					version, sequence, tree.leafSequence, sql.opts.Path)
-			}
-		} else {
-			if _, _, err = tree.Remove(key); err != nil {
-				return err
-			}
-			deleteSequence := tree.deletes[len(tree.deletes)-1].deleteKey.Sequence()
-			if sequence != int(deleteSequence) {
-				return fmt.Errorf("sequence delete mismatch; version=%d expected %d got %d; path=%s",
-					version, sequence, tree.leafSequence, sql.opts.Path)
-			}
-		}
-		if count%250_000 == 0 {
-			sql.opts.Logger.Info(fmt.Sprintf("replayed changelog to version=%d count=%s node/s=%s",
-				version, humanize.Comma(count), humanize.Comma(int64(250_000/time.Since(since).Seconds()))), logPath)
-			since = time.Now()
-		}
-	}
-	rootHash := tree.computeHash()
-	if !bytes.Equal(targetHash, rootHash) {
-		return fmt.Errorf("root hash mismatch; expected %x got %x", targetHash, rootHash)
-	}
-	tree.leaves, tree.branches, tree.leafOrphans, tree.deletes = nil, nil, nil, nil
-	tree.resetSequences()
-	tree.version.Store(toVersion)
-	sql.opts.Logger.Info(fmt.Sprintf("replayed changelog to version=%d count=%s dur=%s root=%v",
-		tree.version.Load(), humanize.Comma(count), time.Since(start).Round(time.Millisecond), tree.root), logPath)
-	return q.Close()
-}
-
-func (sql *SqliteDb) Logger() Logger {
+func (sql *SqliteDb) Logger() logger.Logger {
 	return sql.logger
 }
 
@@ -1284,7 +1298,7 @@ func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *
 func (sql *SqliteDb) runAnalyze() error {
 	start := time.Now()
 	defer func() {
-		sql.metrics.MeasureSince(start, metricsNamespace, "db_analyze")
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_analyze")
 		sql.logger.Warn(fmt.Sprintf("tree %s indexes analyzed, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
 	}()
 
@@ -1310,7 +1324,7 @@ func (sql *SqliteDb) runAnalyze() error {
 func (sql *SqliteDb) runOptimize() error {
 	start := time.Now()
 	defer func() {
-		sql.metrics.MeasureSince(start, metricsNamespace, "db_optimize")
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_optimize")
 		sql.logger.Warn(fmt.Sprintf("tree %s indexes optimized, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
 	}()
 
@@ -1326,7 +1340,7 @@ func (sql *SqliteDb) runOptimize() error {
 func (sql *SqliteDb) runQuickCheck() error {
 	start := time.Now()
 	defer func() {
-		sql.metrics.MeasureSince(start, metricsNamespace, "db_quick_check")
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_quick_check")
 		sql.logger.Warn(fmt.Sprintf("tree %s quick check, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
 	}()
 

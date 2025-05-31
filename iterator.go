@@ -738,7 +738,7 @@ func (i *WrongBranchHashIterator) Next() {
 		}
 
 		nodeKey := NewNodeKey(version, uint32(sequence))
-		node, err := MakeNode(i.sql.pool, nodeKey, nodeBz)
+		node, err := Decode(i.sql.pool, nodeKey, nodeBz)
 		if err != nil {
 			closeErr := i.Close()
 			if closeErr != nil {

@@ -184,7 +184,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 			node._hash()
 
 			buf.Reset()
-			err := node.BytesWithBuffer(buf)
+			err := node.EncodeWithBuffer(buf)
 			if err != nil {
 				return nil, err
 			}
@@ -216,7 +216,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 		node.rightNode = nil
 
 		buf.Reset()
-		err = node.BytesWithBuffer(buf)
+		err = node.EncodeWithBuffer(buf)
 		if err != nil {
 			return nil, err
 		}
@@ -449,7 +449,7 @@ func (snap *sqliteSnapshot) writeStep(node *Node) error {
 	compressBuf.Reset()
 	defer bufPool.Put(compressBuf)
 
-	err := node.BytesWithBuffer(buf)
+	err := node.EncodeWithBuffer(buf)
 	if err != nil {
 		return err
 	}
@@ -709,7 +709,7 @@ func (snap *sqliteSnapshot) writeSnapNode(node *Node, version int64, ordinal, se
 	compressBuf.Reset()
 	defer bufPool.Put(compressBuf)
 
-	err := node.BytesWithBuffer(buf)
+	err := node.EncodeWithBuffer(buf)
 	if err != nil {
 		return err
 	}
@@ -788,7 +788,7 @@ func (sqlImport *sqliteImport) queryStepPreOrder() (node *Node, err error) {
 		return nil, err
 	}
 	nodeKey := NewNodeKey(int64(version), uint32(seq))
-	node, err = MakeNode(sqlImport.pool, nodeKey, bz)
+	node, err = Decode(sqlImport.pool, nodeKey, bz)
 	if err != nil {
 		return nil, err
 	}
@@ -836,7 +836,7 @@ func (sqlImport *sqliteImport) queryStepPostOrder() (node *Node, err error) {
 		return nil, err
 	}
 	nodeKey := NewNodeKey(int64(version), uint32(seq))
-	node, err = MakeNode(sqlImport.pool, nodeKey, bz)
+	node, err = Decode(sqlImport.pool, nodeKey, bz)
 	if err != nil {
 		return nil, err
 	}

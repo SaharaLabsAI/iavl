@@ -13,6 +13,7 @@ import (
 	"github.com/cosmos/iavl/v2/metrics"
 	"github.com/cosmos/iavl/v2/pool"
 	"github.com/cosmos/iavl/v2/types"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 type SqliteBatch struct {
@@ -56,7 +57,7 @@ func (b *SqliteBatch) changelogBatchCommitBegin() error {
 	return b.sql.leafWrite.Exec("Commit; Begin")
 }
 
-func (b *SqliteBatch) execBranchOrphan(nodeKey types.NodeKey) error {
+func (b *SqliteBatch) execBranchOrphan(nodeKey nodetypes.NodeKey) error {
 	return b.treeOrphan.Exec(nodeKey.Version(), int(nodeKey.Sequence()), b.tree.Version())
 }
 
@@ -123,7 +124,7 @@ func (b *SqliteBatch) saveLeaves() (int64, error) {
 		b.leafCount++
 
 		buf.Reset()
-		err := leaf.BytesWithBuffer(buf)
+		err := leaf.EncodeWithBuffer(buf)
 		if err != nil {
 			return b.leafCount, err
 		}
@@ -224,7 +225,7 @@ func (b *SqliteBatch) saveBranches() (n int64, err error) {
 		}
 
 		buf.Reset()
-		err := branch.BytesWithBuffer(buf)
+		err := branch.EncodeWithBuffer(buf)
 		if err != nil {
 			return b.leafCount, err
 		}

@@ -1,0 +1,202 @@
+package node
+
+import (
+	"fmt"
+	"unsafe"
+)
+
+const (
+	hashSize = 32
+	nodeSize = uint64(unsafe.Sizeof(Node{})) + hashSize
+)
+
+type NodeSource int
+
+const (
+	PoolNode NodeSource = iota
+	ManualNode
+)
+
+// Node represents a node in a Tree.
+type Node struct {
+	key           []byte
+	value         []byte
+	hash          []byte
+	nodeKey       NodeKey
+	leftNodeKey   NodeKey
+	rightNodeKey  NodeKey
+	size          int64
+	leftNode      *Node
+	rightNode     *Node
+	subtreeHeight int8
+
+	dirty  bool
+	evict  bool
+	poolID uint64
+	source NodeSource
+}
+
+func (node *Node) NodeKey() NodeKey {
+	node.CheckValid()
+	return node.nodeKey
+}
+
+func (node *Node) Key() []byte {
+	node.CheckValid()
+	return node.key
+}
+
+func (node *Node) Hash() []byte {
+	node.CheckValid()
+	return node.hash
+}
+
+func (node *Node) Version() int64 {
+	return node.nodeKey.Version()
+}
+
+func (node *Node) Value() []byte {
+	node.CheckValid()
+	return node.value
+}
+
+func (node *Node) LeftNode() *Node {
+	node.CheckValid()
+	return node.leftNode
+}
+
+func (node *Node) RightNode() *Node {
+	node.CheckValid()
+	return node.rightNode
+}
+
+func (node *Node) RightNodeKey() *NodeKey {
+	node.CheckValid()
+	return &node.rightNodeKey
+}
+
+func (node *Node) LeftNodeKey() *NodeKey {
+	node.CheckValid()
+	return &node.leftNodeKey
+}
+
+func (node *Node) varSize() uint64 {
+	return uint64(len(node.key) + len(node.value))
+}
+
+func (node *Node) SizeBytes() uint64 {
+	return nodeSize + node.varSize()
+}
+
+func (node *Node) SubTreeHeight() int8 {
+	node.CheckValid()
+	return node.subtreeHeight
+}
+
+func (node *Node) Dirty() bool {
+	node.CheckValid()
+	return node.dirty
+}
+
+func (node *Node) Evict() bool {
+	node.CheckValid()
+	return node.evict
+}
+
+func (node *Node) PoolID() uint64 {
+	return node.poolID
+}
+
+func (node *Node) Source() NodeSource {
+	return node.source
+}
+
+func (node *Node) String() string {
+	return fmt.Sprintf("Node{hash: %x, nodeKey: %s, leftNodeKey: %v, rightNodeKey: %v, size: %d, subtreeHeight: %d, poolId: %d}",
+		node.hash, node.nodeKey, node.leftNodeKey, node.rightNodeKey, node.size, node.subtreeHeight, node.poolID)
+}
+
+func (node *Node) CheckValid() {
+	if node.source == PoolNode && node.poolID == 0 {
+		panic(fmt.Sprintf("attempt to use node (key: %s, nk: %s) after it was returned to pool or not properly initialized", node.key, node.nodeKey))
+	}
+}
+
+func (node *Node) IsLeaf() bool {
+	node.CheckValid()
+	return node.subtreeHeight == 0
+}
+
+func (node *Node) SetLeft(leftNode *Node) {
+	node.CheckValid()
+	node.leftNode = leftNode
+	node.leftNodeKey = leftNode.nodeKey
+}
+
+func (node *Node) SetRight(rightNode *Node) {
+	node.CheckValid()
+	node.rightNode = rightNode
+	node.rightNodeKey = rightNode.nodeKey
+}
+
+func (node *Node) EvictChildren() {
+	if node.leftNode != nil {
+		node.leftNode.evict = true
+		node.leftNode = nil
+	}
+	if node.rightNode != nil {
+		node.rightNode.evict = true
+		node.rightNode = nil
+	}
+}
+
+func (node *Node) SetValue(value []byte) {
+	node.CheckValid()
+	node.value = value
+}
+
+func (node *Node) SetNodeKey(nk NodeKey) {
+	node.CheckValid()
+	node.nodeKey = nk
+}
+
+func (node *Node) SetHash(hash []byte) {
+	node.CheckValid()
+	node.hash = hash
+}
+
+func (node *Node) SetKey(key []byte) {
+	node.CheckValid()
+	node.key = key
+}
+
+func (node *Node) SetDirty(dirty bool) {
+	node.CheckValid()
+	node.dirty = dirty
+}
+
+func (node *Node) SetPoolID(id uint64) {
+	node.poolID = id
+}
+
+func (node *Node) SetSource(src NodeSource) {
+	node.source = src
+}
+
+func (node *Node) Reset() {
+	node.leftNodeKey = emptyNodeKey
+	node.rightNodeKey = emptyNodeKey
+	node.rightNode = nil
+	node.leftNode = nil
+	node.nodeKey = emptyNodeKey
+	node.hash = nil
+	node.key = nil
+	node.value = nil
+	node.subtreeHeight = -1
+	node.size = 0
+	node.dirty = false
+	node.evict = false
+	node.source = PoolNode
+
+	node.poolID = 0
+}

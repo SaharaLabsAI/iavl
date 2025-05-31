@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cosmos/iavl/v2/types"
+	types "github.com/cosmos/iavl/v2/types/node"
 )
 
 var GlobalPoolId atomic.Uint64

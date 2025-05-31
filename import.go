@@ -32,6 +32,15 @@ type Importer struct {
 	inflightCommit <-chan error
 }
 
+func NewImportNode(key, value []byte, version int64, height int8) *Node {
+	return &Node{
+		nodeKey:       NewNodeKey(version, 0),
+		key:           key,
+		value:         value,
+		subtreeHeight: height,
+	}
+}
+
 // newImporter creates a new Importer for an empty Tree
 //
 // version should correspond to the version that was initially exported. It must be greater than

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 // TraverseOrderType is the type of the order in which the tree is traversed.
@@ -17,13 +19,13 @@ const (
 const maxOutChanSize = 8192
 
 type stackEntry struct {
-	node  *Node
+	node  *nodetypes.Node
 	state int // 0: process left, 1: process right, 2: process self
 }
 
 type Exporter struct {
 	tree    *Tree
-	out     chan *Node
+	out     chan *nodetypes.Node
 	errCh   chan error
 	count   int
 	startAt time.Time
@@ -38,7 +40,7 @@ func (tree *Tree) Export(order TraverseOrderType) *Exporter {
 
 	exporter := &Exporter{
 		tree:    imTree,
-		out:     make(chan *Node, maxOutChanSize),
+		out:     make(chan *nodetypes.Node, maxOutChanSize),
 		errCh:   make(chan error),
 		count:   0,
 		startAt: time.Now(),
@@ -60,7 +62,7 @@ func (tree *Tree) Export(order TraverseOrderType) *Exporter {
 	return exporter
 }
 
-func (e *Exporter) postOrderNext(root *Node) {
+func (e *Exporter) postOrderNext(root *nodetypes.Node) {
 	if root == nil {
 		return
 	}
@@ -70,7 +72,7 @@ func (e *Exporter) postOrderNext(root *Node) {
 	for len(s) > 0 {
 		currentEntry := &s[len(s)-1]
 
-		if currentEntry.node.isLeaf() {
+		if currentEntry.node.IsLeaf() {
 			e.out <- currentEntry.node
 			s = s[:len(s)-1]
 			continue
@@ -123,12 +125,12 @@ func (e *Exporter) postOrderNext(root *Node) {
 	}
 }
 
-func (e *Exporter) preOrderNext(root *Node) {
+func (e *Exporter) preOrderNext(root *nodetypes.Node) {
 	if root == nil {
 		return
 	}
 
-	stack := []*Node{root}
+	stack := []*nodetypes.Node{root}
 
 	for len(stack) > 0 {
 		n := len(stack) - 1
@@ -269,7 +271,7 @@ func (tree *Tree) ExportVersion(version int64, order TraverseOrderType) (*Export
 
 	exporter := &Exporter{
 		tree:    imTree,
-		out:     make(chan *Node, maxOutChanSize),
+		out:     make(chan *nodetypes.Node, maxOutChanSize),
 		errCh:   make(chan error),
 		count:   0,
 		version: version,

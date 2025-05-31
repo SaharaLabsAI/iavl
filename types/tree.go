@@ -1,11 +1,14 @@
 package types
 
-import "github.com/cosmos/iavl/v2/db"
+import (
+	"github.com/cosmos/iavl/v2/db"
+	node "github.com/cosmos/iavl/v2/types/node"
+)
 
 type UpdatedTree interface {
-	Root() *Node
+	Root() *node.Node
 	HeightFilter() int
-	ReturnNode(*Node)
+	ReturnNode(*node.Node)
 	DB() db.DB
 	Version() int64
 	Updates() *NodeUpdates

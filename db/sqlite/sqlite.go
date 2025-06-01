@@ -19,7 +19,6 @@ import (
 	"github.com/cosmos/iavl/v2/metrics"
 	"github.com/cosmos/iavl/v2/pool"
 	nodepool "github.com/cosmos/iavl/v2/pool/node"
-	"github.com/cosmos/iavl/v2/types"
 	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
@@ -973,13 +972,13 @@ func (sql *SqliteDb) WarmLeaves() error {
 	return stmt.Close()
 }
 
-func (sql *SqliteDb) getRightNode(node *types.Node) (*types.Node, error) {
+func (sql *SqliteDb) GetRightNode(node *nodetypes.Node) (*nodetypes.Node, error) {
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no children")
 	}
 
 	var (
-		rightNode *types.Node
+		rightNode *nodetypes.Node
 		err       error
 	)
 
@@ -993,12 +992,10 @@ func (sql *SqliteDb) getRightNode(node *types.Node) (*types.Node, error) {
 			node.RightNodeKey(), node.SubTreeHeight(), sql.opts.Path, err)
 	}
 
-	node.SetRightNode(rightNode)
-
-	return node.RightNode(), nil
+	return rightNode, nil
 }
 
-func (sql *SqliteDb) getLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (sql *SqliteDb) GetLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no children")
 	}
@@ -1018,9 +1015,7 @@ func (sql *SqliteDb) getLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) 
 			node.LeftNodeKey(), node.SubTreeHeight(), sql.opts.Path, err)
 	}
 
-	node.SetLeftNode(leftNode)
-
-	return node.LeftNode(), nil
+	return leftNode, nil
 }
 
 func (sql *SqliteDb) isSharded() (bool, error) {

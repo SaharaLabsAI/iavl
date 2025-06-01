@@ -2,7 +2,6 @@ package iavl
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	nodetypes "github.com/cosmos/iavl/v2/types/node"
@@ -83,7 +82,7 @@ func (e *Exporter) postOrderNext(root *nodetypes.Node) {
 		case 0: // State 0: Attempt to process the left child
 			currentEntry.state = 1 // Advance this node's state for the next time it's processed
 
-			left, err := currentEntry.node.getLeftNode(e.tree)
+			left, err := e.tree.getLeftNode(currentEntry.node)
 			if err != nil {
 				e.errCh <- err
 				return
@@ -98,7 +97,7 @@ func (e *Exporter) postOrderNext(root *nodetypes.Node) {
 		case 1: // State 1: Attempt to process the right child
 			currentEntry.state = 2
 
-			right, err := currentEntry.node.getRightNode(e.tree)
+			right, err := e.tree.getRightNode(currentEntry.node)
 			if err != nil {
 				e.errCh <- err
 				return
@@ -116,8 +115,8 @@ func (e *Exporter) postOrderNext(root *nodetypes.Node) {
 
 			// Explicitly nil out child pointers in the processedNode after it's been sent.
 			if processedNode != nil {
-				processedNode.leftNode = nil
-				processedNode.rightNode = nil
+				processedNode.SetLeft(nil)
+				processedNode.SetRight(nil)
 			}
 
 			s = s[:len(s)-1]
@@ -139,8 +138,8 @@ func (e *Exporter) preOrderNext(root *nodetypes.Node) {
 
 		e.out <- node
 
-		if !node.isLeaf() {
-			right, err := node.getRightNode(e.tree)
+		if !node.IsLeaf() {
+			right, err := e.tree.getRightNode(node)
 			if err != nil {
 				e.errCh <- err
 				return
@@ -149,7 +148,7 @@ func (e *Exporter) preOrderNext(root *nodetypes.Node) {
 				stack = append(stack, right)
 			}
 
-			left, err := node.getLeftNode(e.tree)
+			left, err := e.tree.getLeftNode(node)
 			if err != nil {
 				e.errCh <- err
 				return
@@ -177,19 +176,14 @@ func (e *Exporter) Next() (*SnapshotNode, error) {
 		}
 		e.count++
 
-		if e.count%200000 == 0 {
-			e.tree.sql.logger.Info("%s exported nodes %d duration %d\n", e.tree.Path(), e.count, time.Since(e.startAt).Milliseconds())
-			fmt.Printf("progress exported nodes %d duration %d\n", e.count, time.Since(e.startAt).Milliseconds())
-		}
-
 		snapNode := &SnapshotNode{
-			Key:     node.key,
-			Value:   node.value,
-			Version: node.nodeKey.Version(),
-			Height:  node.subtreeHeight,
+			Key:     node.Key(),
+			Value:   node.Value(),
+			Version: node.Version(),
+			Height:  node.SubTreeHeight(),
 		}
 
-		e.tree.sql.pool.Put(node)
+		e.tree.returnNode(node)
 
 		return snapNode, nil
 	case err, ok := <-e.errCh:
@@ -201,12 +195,12 @@ func (e *Exporter) Next() (*SnapshotNode, error) {
 					e.count++
 
 					snapNode := &SnapshotNode{
-						Key:     node.key,
-						Value:   node.value,
-						Version: node.nodeKey.Version(),
-						Height:  node.subtreeHeight,
+						Key:     node.Key(),
+						Value:   node.Value(),
+						Version: node.Version(),
+						Height:  node.SubTreeHeight(),
 					}
-					e.tree.sql.pool.Put(node)
+					e.tree.returnNode(node)
 
 					return snapNode, nil
 				}
@@ -219,7 +213,7 @@ func (e *Exporter) Next() (*SnapshotNode, error) {
 }
 
 // Primary used for unit tests
-func (e *Exporter) NextRawNode() (*Node, error) {
+func (e *Exporter) NextRawNode() (*nodetypes.Node, error) {
 	select {
 	case node, ok := <-e.out:
 		if !ok {
@@ -288,6 +282,7 @@ func (tree *Tree) ExportVersion(version int64, order TraverseOrderType) (*Export
 		defer close(exporter.errCh)
 
 		switch traverseOrder {
+
 		case PostOrder:
 			exporter.postOrderNext(imTree.root)
 		case PreOrder:

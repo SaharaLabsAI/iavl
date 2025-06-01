@@ -15,18 +15,19 @@ import (
 
 	"github.com/cosmos/iavl/v2/db/sqlite"
 	"github.com/cosmos/iavl/v2/metrics"
-	"github.com/cosmos/iavl/v2/pool"
+	nodePool "github.com/cosmos/iavl/v2/pool/node"
 	"github.com/cosmos/iavl/v2/types"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 type Tree struct {
 	version      atomic.Int64
-	root         *types.Node
+	root         *nodetypes.Node
 	metrics      metrics.Proxy
 	sql          *sqlite.SqliteDb
 	sqlWriter    *sqlite.SqlWriter
 	writerCancel context.CancelFunc
-	pool         *pool.NodePool
+	nodePool     *nodePool.NodePool
 
 	// options
 	maxWorkingSize uint64
@@ -67,9 +68,9 @@ func DefaultTreeOptions() TreeOptions {
 }
 
 type nodeLoadTask struct {
-	parentNode *types.Node
+	parentNode *nodetypes.Node
 	isLeft     bool // true for left child, false for right child
-	nodeKey    types.NodeKey
+	nodeKey    nodetypes.NodeKey
 }
 
 var loadTaskPool = &sync.Pool{
@@ -80,15 +81,15 @@ var loadTaskPool = &sync.Pool{
 
 var nodeSlicePool = &sync.Pool{
 	New: func() any {
-		return make([]*types.Node, 0, 1024)
+		return make([]*nodetypes.Node, 0, 1024)
 	},
 }
 
 type CompactNodeBatch struct {
-	nodes     []*types.Node
+	nodes     []*nodetypes.Node
 	parentIdx []int32
 	isLeft    []bool
-	nodeKeys  []types.NodeKey
+	nodeKeys  []nodetypes.NodeKey
 }
 
 func (cnb *CompactNodeBatch) reset() {
@@ -98,7 +99,7 @@ func (cnb *CompactNodeBatch) reset() {
 	cnb.nodeKeys = cnb.nodeKeys[:0]
 }
 
-func (cnb *CompactNodeBatch) add(node *types.Node, parent int32, left bool, key types.NodeKey) {
+func (cnb *CompactNodeBatch) add(node *nodetypes.Node, parent int32, left bool, key nodetypes.NodeKey) {
 	cnb.nodes = append(cnb.nodes, node)
 	cnb.parentIdx = append(cnb.parentIdx, parent)
 	cnb.isLeft = append(cnb.isLeft, left)
@@ -108,16 +109,16 @@ func (cnb *CompactNodeBatch) add(node *types.Node, parent int32, left bool, key 
 var compactBatchPool = &sync.Pool{
 	New: func() any {
 		return &CompactNodeBatch{
-			nodes:     make([]*types.Node, 0, 256),
+			nodes:     make([]*nodetypes.Node, 0, 256),
 			parentIdx: make([]int32, 0, 256),
 			isLeft:    make([]bool, 0, 256),
-			nodeKeys:  make([]types.NodeKey, 0, 256),
+			nodeKeys:  make([]nodetypes.NodeKey, 0, 256),
 		}
 	},
 }
 
 // estimateCapacity uses subtree height for better memory pre-allocation
-func (tree *Tree) estimateCapacity(rootNode *types.Node) (int, int) {
+func (tree *Tree) estimateCapacity(rootNode *nodetypes.Node) (int, int) {
 	if rootNode == nil {
 		return 64, 32
 	}
@@ -170,7 +171,7 @@ func NewTree(sql *sqlite.SqliteDb, pool *pool.NodePool, opts TreeOptions) *Tree 
 		sql:            sql,
 		sqlWriter:      sql.NewSqlWriter(),
 		writerCancel:   cancel,
-		pool:           pool,
+		nodePool:       pool,
 		metrics:        opts.MetricsProxy,
 		maxWorkingSize: 1.5 * 1024 * 1024 * 1024,
 		heightFilter:   opts.HeightFilter,
@@ -513,7 +514,7 @@ func (tree *Tree) deepHashParallel(node *Node, depth int8) {
 		leafWorkers = max(1, min(leafWorkers, 6)) // Cap at 6 workers, min 1
 
 		if leafWorkers > 1 && len(allLeaves) > 2 { // Much lower threshold
-			leafChan := make(chan *types.Node, min(len(allLeaves), 50))
+			leafChan := make(chan *nodetypes.Node, min(len(allLeaves), 50))
 
 			go func() {
 				defer close(leafChan)
@@ -732,9 +733,9 @@ func (tree *Tree) loadNodesParallel(tasks []nodeLoadTask, connPool []*SqliteRead
 
 				// Load node from database using the dedicated connection
 				if isLeafSeq(task.nodeKey.Sequence()) {
-					loadedNode, err = conn.getLeaf(tree.pool, task.nodeKey)
+					loadedNode, err = conn.getLeaf(tree.nodePool, task.nodeKey)
 				} else {
-					loadedNode, err = conn.getNode(tree.pool, task.nodeKey)
+					loadedNode, err = conn.getNode(tree.nodePool, task.nodeKey)
 				}
 
 				resultChan <- loadResult{
@@ -1071,7 +1072,7 @@ func (tree *Tree) recursiveSet(node *Node, key []byte, value []byte) (
 			switch bytes.Compare(currentFrame.key, currentNode.Key()) {
 			case -1: // setKey < leafKey
 				tree.metrics.IncrCounter(2, metricsNamespace, "pool_get")
-				parent := tree.pool.Get()
+				parent := tree.nodePool.Get()
 				parent.nodeKey = tree.nextNodeKey()
 				parent.key = currentNode.Key()
 				parent.subtreeHeight = 1
@@ -1092,7 +1093,7 @@ func (tree *Tree) recursiveSet(node *Node, key []byte, value []byte) (
 				}
 			case 1: // setKey > leafKey
 				tree.metrics.IncrCounter(2, metricsNamespace, "pool_get")
-				parent := tree.pool.Get()
+				parent := tree.nodePool.Get()
 				parent.nodeKey = tree.nextNodeKey()
 				parent.key = currentFrame.key
 				parent.subtreeHeight = 1
@@ -1580,7 +1581,7 @@ func (tree *Tree) addDelete(node *Node) {
 
 // NewLeafNode returns a new node from a key, value and version.
 func (tree *Tree) NewLeafNode(key []byte, value []byte) *Node {
-	node := tree.pool.Get()
+	node := tree.nodePool.Get()
 
 	node.nodeKey = tree.nextLeafNodeKey()
 
@@ -1601,7 +1602,7 @@ func (tree *Tree) NewLeafNode(key []byte, value []byte) *Node {
 	return node
 }
 
-func (tree *Tree) returnNode(node *Node) {
+func (tree *Tree) returnNode(node *nodetypes.Node) {
 	if node == nil {
 		return
 	}
@@ -1636,7 +1637,7 @@ func (tree *Tree) returnNode(node *Node) {
 	node.subtreeHeight = -1
 
 	// Return node to the pool for reuse
-	tree.pool.Put(node)
+	tree.nodePool.Put(node)
 }
 
 func (tree *Tree) Close() error {
@@ -1829,7 +1830,7 @@ func (tree *Tree) GetImmutable(version int64) (*Tree, error) {
 		sql:            sql,
 		sqlWriter:      nil,
 		writerCancel:   nil,
-		pool:           sql.pool,
+		nodePool:       sql.pool,
 		metrics:        tree.metrics,
 		maxWorkingSize: tree.maxWorkingSize,
 		heightFilter:   tree.heightFilter,
@@ -1866,7 +1867,7 @@ func (tree *Tree) GetImmutableProvable(version int64) (*Tree, error) {
 		sql:            sql,
 		sqlWriter:      nil,
 		writerCancel:   nil,
-		pool:           sql.pool,
+		nodePool:       sql.pool,
 		metrics:        tree.metrics,
 		maxWorkingSize: tree.maxWorkingSize,
 		heightFilter:   tree.heightFilter,

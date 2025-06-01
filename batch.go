@@ -3,6 +3,8 @@ package iavl
 import (
 	"fmt"
 	"time"
+
+	"github.com/cosmos/iavl/v2/constants"
 )
 
 type BatchOperationType int
@@ -43,7 +45,7 @@ func (tree *Tree) BatchSetRemove(operations []BatchOperation) error {
 	}
 
 	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), metricsNamespace, "tree_batch_set_remove_deferred")
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_batch_set_remove_deferred")
 	}
 
 	tree.rw.Lock()
@@ -101,13 +103,13 @@ func (tree *Tree) BatchSetRemove(operations []BatchOperation) error {
 	tree.modificationCount += int64(len(operations))
 
 	if batchMetrics.updates > 0 {
-		tree.metrics.IncrCounter(float32(batchMetrics.updates), metricsNamespace, "tree_update")
+		tree.metrics.IncrCounter(float32(batchMetrics.updates), constants.MetricsNamespace, "tree_update")
 	}
 	if batchMetrics.newNodes > 0 {
-		tree.metrics.IncrCounter(float32(batchMetrics.newNodes), metricsNamespace, "tree_new_node")
+		tree.metrics.IncrCounter(float32(batchMetrics.newNodes), constants.MetricsNamespace, "tree_new_node")
 	}
 	if batchMetrics.deletions > 0 {
-		tree.metrics.IncrCounter(float32(batchMetrics.deletions), metricsNamespace, "tree_delete")
+		tree.metrics.IncrCounter(float32(batchMetrics.deletions), constants.MetricsNamespace, "tree_delete")
 	}
 
 	return nil

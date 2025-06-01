@@ -3,6 +3,9 @@ package iavl
 import (
 	"errors"
 	"fmt"
+
+	"github.com/cosmos/iavl/v2/db/sqlite"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 // maxBatchSize is the maximum size of the import batch before flushing it to the database
@@ -22,9 +25,9 @@ type Importer struct {
 	tree      *Tree
 	version   int64
 	batchSize uint32
-	batch     *sqliteBatch
+	batch     *sqlite.SqliteBatch
 
-	stack         []*Node
+	stack         []*nodetypes.Node
 	leafSequences []uint32
 	nodeSequences []uint32
 
@@ -32,13 +35,8 @@ type Importer struct {
 	inflightCommit <-chan error
 }
 
-func NewImportNode(key, value []byte, version int64, height int8) *Node {
-	return &Node{
-		nodeKey:       NewNodeKey(version, 0),
-		key:           key,
-		value:         value,
-		subtreeHeight: height,
-	}
+func NewImportNode(key, value []byte, version int64, height int8) *nodetypes.Node {
+	return nodetypes.NewNode(key, value, version, height)
 }
 
 // newImporter creates a new Importer for an empty Tree
@@ -81,7 +79,7 @@ func newImporter(tree *Tree, version int64) (*Importer, error) {
 	return &Importer{
 		tree:    tree,
 		version: version,
-		batch: &sqliteBatch{
+		batch: &sqlite.SqliteBatch{
 			sql:    tree.sql,
 			tree:   tree,
 			size:   importBatchSize,

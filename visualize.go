@@ -5,15 +5,15 @@ import (
 
 	"github.com/emicklei/dot"
 
-	"github.com/cosmos/iavl/v2/types"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
-func writeDotGraph(root *types.Node, lastGraph *dot.Graph) *dot.Graph {
+func writeDotGraph(root *nodetypes.Node, lastGraph *dot.Graph) *dot.Graph {
 	graph := dot.NewGraph(dot.Directed)
 
-	var traverse func(node *types.Node) dot.Node
+	var traverse func(node *nodetypes.Node) dot.Node
 	var i int
-	traverse = func(node *types.Node) dot.Node {
+	traverse = func(node *nodetypes.Node) dot.Node {
 		if node == nil {
 			return dot.Node{}
 		}

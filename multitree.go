@@ -12,18 +12,21 @@ import (
 
 	"github.com/dustin/go-humanize"
 
+	"github.com/cosmos/iavl/v2/db/sqlite"
+	"github.com/cosmos/iavl/v2/logger"
 	"github.com/cosmos/iavl/v2/metrics"
+	nodepool "github.com/cosmos/iavl/v2/pool/node"
 	"github.com/cosmos/iavl/v2/testutil"
 )
 
 // MultiTree encapsulates multiple IAVL trees, each with its own "store key" in the context of the Cosmos SDK.
 // Within IAVL v2 is only used to test the IAVL v2 implementation, and for import/export of IAVL v2 state.
 type MultiTree struct {
-	logger Logger
+	logger logger.Logger
 
 	Trees map[string]*Tree
 
-	pool     *NodePool
+	pool     *nodepool.NodePool
 	rootPath string
 	treeOpts TreeOptions
 
@@ -31,7 +34,7 @@ type MultiTree struct {
 	errorCh chan error
 }
 
-func NewMultiTree(logger Logger, rootPath string, opts TreeOptions) *MultiTree {
+func NewMultiTree(logger logger.Logger, rootPath string, opts TreeOptions) *MultiTree {
 	if opts.MetricsProxy == nil {
 		opts.MetricsProxy = metrics.NilMetrics{}
 	}
@@ -40,13 +43,13 @@ func NewMultiTree(logger Logger, rootPath string, opts TreeOptions) *MultiTree {
 		doneCh:   make(chan saveVersionResult, 1000),
 		errorCh:  make(chan error, 1000),
 		treeOpts: opts,
-		pool:     NewNodePool(),
+		pool:     nodepool.NewNodePool(),
 		rootPath: rootPath,
 		logger:   logger,
 	}
 }
 
-func ImportMultiTree(logger Logger, version int64, path string, treeOpts TreeOptions) (*MultiTree, error) {
+func ImportMultiTree(logger logger.Logger, version int64, path string, treeOpts TreeOptions) (*MultiTree, error) {
 	mt := NewMultiTree(logger, path, treeOpts)
 	paths, err := FindDbsInPath(path)
 	if err != nil {
@@ -121,12 +124,12 @@ func (mt *MultiTree) MountTrees() error {
 }
 
 func (mt *MultiTree) newTree(dbPath string) (*Tree, error) {
-	pool := NewNodePool()
+	pool := nodepool.NewNodePool()
 	opts := mt.treeOpts
 	if _, ok := mt.treeOpts.MetricsProxy.(*metrics.StructMetrics); ok {
 		opts.MetricsProxy = metrics.NewStructMetrics()
 	}
-	sql, err := NewSqliteDb(pool, defaultSqliteDbOptions(SqliteDbOptions{
+	sql, err := sqlite.NewSqliteDb(pool, sqlite.DefaultSqliteDbOptions(sqlite.SqliteDbOptions{
 		Path:    dbPath,
 		Metrics: opts.MetricsProxy,
 		Logger:  mt.logger,
@@ -253,7 +256,7 @@ func (mt *MultiTree) Hash() []byte {
 	slices.Sort(storeKeys)
 	for _, k := range storeKeys {
 		tree := mt.Trees[k]
-		hashes = append(hashes, tree.root.hash...)
+		hashes = append(hashes, tree.root.Hash()...)
 	}
 	hash := sha256.Sum256(hashes)
 	return hash[:]

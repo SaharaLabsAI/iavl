@@ -36,6 +36,16 @@ type Node struct {
 	source NodeSource
 }
 
+func NewNode(key, value []byte, version int64, height int8) *Node {
+	return &Node{
+		nodeKey:       NewNodeKey(version, 0),
+		key:           key,
+		value:         value,
+		subtreeHeight: height,
+		source:        ManualNode,
+	}
+}
+
 func (node *Node) NodeKey() NodeKey {
 	node.CheckValid()
 	return node.nodeKey
@@ -93,6 +103,11 @@ func (node *Node) SubTreeHeight() int8 {
 	return node.subtreeHeight
 }
 
+func (node *Node) Size() int64 {
+	node.CheckValid()
+	return node.size
+}
+
 func (node *Node) Dirty() bool {
 	node.CheckValid()
 	return node.dirty
@@ -130,13 +145,17 @@ func (node *Node) IsLeaf() bool {
 func (node *Node) SetLeft(leftNode *Node) {
 	node.CheckValid()
 	node.leftNode = leftNode
-	node.leftNodeKey = leftNode.nodeKey
+	if leftNode != nil {
+		node.leftNodeKey = leftNode.nodeKey
+	}
 }
 
 func (node *Node) SetRight(rightNode *Node) {
 	node.CheckValid()
 	node.rightNode = rightNode
-	node.rightNodeKey = rightNode.nodeKey
+	if leftNode != nil {
+		node.rightNodeKey = rightNode.nodeKey
+	}
 }
 
 func (node *Node) EvictChildren() {
@@ -153,6 +172,16 @@ func (node *Node) EvictChildren() {
 func (node *Node) SetValue(value []byte) {
 	node.CheckValid()
 	node.value = value
+}
+
+func (node *Node) SetSubTreeHeight(height int8) {
+	node.CheckValid()
+	node.subtreeHeight = height
+}
+
+func (node *Node) SetSize(size int64) {
+	node.CheckValid()
+	node.size = size
 }
 
 func (node *Node) SetNodeKey(nk NodeKey) {

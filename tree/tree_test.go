@@ -1,4 +1,4 @@
-package iavl
+package tree
 
 import (
 	"crypto/sha256"

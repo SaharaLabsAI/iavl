@@ -22,14 +22,14 @@ func (node *Node) HashWith(h hash.Hash, buf *bytes.Buffer) []byte {
 		return node.hash
 	}
 
-	node.writeHashToBuffer(buf)
+	node.writeHashBytesToBuffer(buf)
 	h.Write(buf.Bytes())
 	node.hash = h.Sum(nil)
 
 	return node.hash
 }
 
-func (node *Node) writeHashToBuffer(buf *bytes.Buffer) {
+func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 	var tmp [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(tmp[:], int64(node.subtreeHeight))
 	buf.Write(tmp[:n])
@@ -148,7 +148,7 @@ func (node *Node) _hash() []byte {
 	buf := pool.BufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 
-	node.writeHashToBuffer(buf)
+	node.writeHashBytesToBuffer(buf)
 	h.Write(buf.Bytes())
 
 	node.hash = h.Sum(nil)

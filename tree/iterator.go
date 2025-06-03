@@ -1,4 +1,4 @@
-package iavl
+package tree
 
 import (
 	"bytes"

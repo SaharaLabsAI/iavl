@@ -1,4 +1,4 @@
-package iavl_test
+package tree_test
 
 import (
 	"testing"

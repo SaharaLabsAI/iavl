@@ -14,6 +14,8 @@ import (
 	"github.com/eatonphil/gosqlite"
 	api "github.com/kocubinski/costor-api"
 	"github.com/kocubinski/costor-api/logz"
+
+	"github.com/cosmos/iavl/v2/db/sqlite"
 )
 
 type sqliteSnapshot struct {
@@ -21,7 +23,7 @@ type sqliteSnapshot struct {
 
 	snapshotInsert *gosqlite.Stmt
 
-	sql        *SqliteDb
+	sql        *sqlite.SqliteDb
 	leafInsert *gosqlite.Stmt
 	treeInsert *gosqlite.Stmt
 

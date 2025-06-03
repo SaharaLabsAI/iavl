@@ -153,7 +153,7 @@ func (node *Node) SetLeft(leftNode *Node) {
 func (node *Node) SetRight(rightNode *Node) {
 	node.CheckValid()
 	node.rightNode = rightNode
-	if leftNode != nil {
+	if rightNode != nil {
 		node.rightNodeKey = rightNode.nodeKey
 	}
 }

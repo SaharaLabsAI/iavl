@@ -1,4 +1,4 @@
-package iavl
+package tree
 
 import (
 	"bytes"
@@ -7,19 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	ics23 "github.com/cosmos/ics23/go"
 
 	encoding "github.com/cosmos/iavl/v2/internal"
-	"github.com/cosmos/iavl/v2/types"
+	"github.com/cosmos/iavl/v2/pool"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
-
-var proofBufPool = &sync.Pool{
-	New: func() any {
-		return new(bytes.Buffer)
-	},
-}
 
 func (tree *Tree) GetProof(version int64, key []byte) (proof *ics23.CommitmentProof, err error) {
 	t, err := tree.GetImmutableProvable(version)
@@ -70,8 +64,8 @@ func (tree *Tree) getExistenceProof(key []byte) (proof *ics23.ExistenceProof, er
 	}
 
 	return &ics23.ExistenceProof{
-		Key:   node.key,
-		Value: node.value,
+		Key:   node.Key(),
+		Value: node.Value(),
 		Leaf:  convertLeafOp(node.Version()),
 		Path:  convertInnerOps(path),
 	}, err
@@ -191,7 +185,7 @@ func convertVarIntToBytes(orig int64, buf [binary.MaxVarintLen64]byte) []byte {
 // If the key does not exist, returns the path to the next leaf left of key (w/
 // path), except when key is less than the least item, in which case it returns
 // a path to the least item.
-func (tree *Tree) PathToLeaf(node *types.Node, key []byte) (PathToLeaf, *types.Node, error) {
+func (tree *Tree) PathToLeaf(node *nodetypes.Node, key []byte) (PathToLeaf, *nodetypes.Node, error) {
 	path := new(PathToLeaf)
 	val, err := tree.pathToLeaf(node, key, path)
 	return *path, val, err
@@ -200,7 +194,7 @@ func (tree *Tree) PathToLeaf(node *types.Node, key []byte) (PathToLeaf, *types.N
 // pathToLeaf is a helper which recursively constructs the PathToLeaf.
 // As an optimization the already constructed path is passed in as an argument
 // and is shared among recursive calls.
-func (tree *Tree) pathToLeaf(node *types.Node, key []byte, path *PathToLeaf) (*types.Node, error) {
+func (tree *Tree) pathToLeaf(node *nodetypes.Node, key []byte, path *PathToLeaf) (*nodetypes.Node, error) {
 	if node.SubTreeHeight() == 0 {
 		if bytes.Equal(node.Key(), key) {
 			return node, nil
@@ -214,21 +208,21 @@ func (tree *Tree) pathToLeaf(node *types.Node, key []byte, path *PathToLeaf) (*t
 	// already stored in the next ProofInnerNode in PathToLeaf.
 	if bytes.Compare(key, node.Key()) < 0 {
 		// left side
-		rightNode, err := node.getRightNode(tree)
+		rightNode, err := tree.getRightNode(node)
 		if err != nil {
 			return nil, err
 		}
 
 		pin := ProofInnerNode{
-			Height:  node.subtreeHeight,
-			Size:    node.size,
+			Height:  node.SubTreeHeight(),
+			Size:    node.Size(),
 			Version: node.Version(),
 			Left:    nil,
-			Right:   rightNode.hash,
+			Right:   rightNode.Hash(),
 		}
 		*path = append(*path, pin)
 
-		leftNode, err := node.getLeftNode(tree)
+		leftNode, err := tree.getLeftNode(node)
 		if err != nil {
 			return nil, err
 		}
@@ -236,21 +230,21 @@ func (tree *Tree) pathToLeaf(node *types.Node, key []byte, path *PathToLeaf) (*t
 		return n, err
 	}
 	// right side
-	leftNode, err := node.getLeftNode(tree)
+	leftNode, err := tree.getLeftNode(node)
 	if err != nil {
 		return nil, err
 	}
 
 	pin := ProofInnerNode{
-		Height:  node.subtreeHeight,
-		Size:    node.size,
+		Height:  node.SubTreeHeight(),
+		Size:    node.Size(),
 		Version: node.Version(),
-		Left:    leftNode.hash,
+		Left:    leftNode.Hash(),
 		Right:   nil,
 	}
 	*path = append(*path, pin)
 
-	rightNode, err := node.getRightNode(tree)
+	rightNode, err := tree.getRightNode(node)
 	if err != nil {
 		return nil, err
 	}
@@ -290,9 +284,9 @@ func (pin ProofInnerNode) stringIndented(indent string) string {
 func (pin ProofInnerNode) Hash(childHash []byte) ([]byte, error) {
 	hasher := sha256.New()
 
-	buf := proofBufPool.Get().(*bytes.Buffer)
+	buf := pool.BufPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	defer proofBufPool.Put(buf)
+	defer pool.BufPool.Put(buf)
 
 	err := encoding.EncodeVarint(buf, int64(pin.Height))
 	if err == nil {
@@ -360,9 +354,9 @@ func (pln ProofLeafNode) stringIndented(indent string) string {
 func (pln ProofLeafNode) Hash() ([]byte, error) {
 	hasher := sha256.New()
 
-	buf := proofBufPool.Get().(*bytes.Buffer)
+	buf := pool.BufPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	defer proofBufPool.Put(buf)
+	defer pool.BufPool.Put(buf)
 
 	err := encoding.EncodeVarint(buf, 0)
 	if err == nil {

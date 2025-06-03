@@ -15,18 +15,18 @@ type NodePool interface {
 	Get() *Node
 }
 
-func (node *Node) EncodeWithBuffer(buf *bytes.Buffer) error {
-	buf.Reset()
-	return node.writeBytes(buf)
-}
-
-func (node *Node) Bytes() ([]byte, error) {
+func (node *Node) Encode() ([]byte, error) {
 	buf := &bytes.Buffer{}
 	err := node.writeBytes(buf)
 	if err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func (node *Node) EncodeWithBuffer(buf *bytes.Buffer) error {
+	buf.Reset()
+	return node.writeBytes(buf)
 }
 
 // Decode constructs a *Node from an encoded byte slice.

@@ -1,11 +1,11 @@
-package iavl
+package tree
 
 import (
 	"bytes"
 	"encoding/binary"
 	"sort"
 
-	"github.com/cosmos/iavl/v2/types"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
 type WrongVersionKey struct {
@@ -42,7 +42,7 @@ func (tree *Tree) Compare(other *Tree) error {
 	return err
 }
 
-func doCompare(tree1 *Tree, node1 *types.Node, tree2 *Tree, node2 *types.Node) (bool, error) {
+func doCompare(tree1 *Tree, node1 *nodetypes.Node, tree2 *Tree, node2 *nodetypes.Node) (bool, error) {
 	if node1.IsLeaf() {
 		if !bytes.Equal(node1.Hash(), node2.Hash()) {
 			return false, nil

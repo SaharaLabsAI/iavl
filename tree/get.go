@@ -2,9 +2,44 @@ package tree
 
 import (
 	"bytes"
+	"time"
 
+	"github.com/cosmos/iavl/v2/constants"
 	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
+
+func (tree *Tree) Has(key []byte) (bool, error) {
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_has")
+	}
+
+	val, err := tree.Get(key)
+	if err != nil {
+		return false, err
+	}
+
+	return val != nil, nil
+}
+
+func (tree *Tree) Get(key []byte) ([]byte, error) {
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
+	}
+
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	treeVersion := tree.version.Load()
+
+	if val, exists := tree.cache[string(key)]; exists {
+		return val, nil
+	}
+	if _, exists := tree.deleted[string(key)]; exists {
+		return nil, nil
+	}
+
+	return tree.db.GetVersioned(key, treeVersion)
+}
 
 func (t *Tree) get(node *nodetypes.Node, key []byte) (index int64, value []byte, err error) {
 	if node.IsLeaf() {

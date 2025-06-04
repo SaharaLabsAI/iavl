@@ -6,82 +6,29 @@ import (
 	"fmt"
 	"sort"
 	"testing"
-	"time"
 	"unsafe"
 
 	"github.com/cosmos/iavl-bench/bench"
-	"github.com/dustin/go-humanize"
 	api "github.com/kocubinski/costor-api"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cosmos/iavl/v2/metrics"
+	"github.com/cosmos/iavl/v2/db/sqlite"
+	"github.com/cosmos/iavl/v2/logger"
+	nodepool "github.com/cosmos/iavl/v2/pool/node"
 	"github.com/cosmos/iavl/v2/testutil"
+	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
-func TestTree_Hash(t *testing.T) {
-	var err error
-	tmpDir := t.TempDir()
-
-	require.NoError(t, err)
-	opts := testutil.BigTreeOptions_100_000()
-
-	// this hash was validated as correct (with this same dataset) in iavl-bench
-	// with `go run . tree --seed 1234 --dataset std`
-	// at this commit tree: https://github.com/cosmos/iavl-bench/blob/3a6a1ec0a8cbec305e46239454113687da18240d/iavl-v0/main.go#L136
-	opts.Until = 100
-	opts.UntilHash = "0101e1d6f3158dcb7221acd7ed36ce19f2ef26847ffea7ce69232e362539e5cf"
-	treeOpts := TreeOptions{
-		HeightFilter: 1, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
+func rehashTree(node *nodetypes.Node) {
+	if node.IsLeaf() {
+		return
 	}
+	node.SetHash(nil)
 
-	testStart := time.Now()
-	testStart = time.Now()
-	multiTree := NewMultiTree(NewTestLogger(), tmpDir, treeOpts)
-	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
-	require.True(t, ok)
-	for _, sk := range itrs.StoreKeys() {
-		require.NoError(t, multiTree.MountTree(sk))
-	}
-	leaves, err := multiTree.TestBuild(opts)
-	require.NoError(t, err)
-	treeDuration := time.Since(testStart)
-	fmt.Printf("mean leaves/s: %s\n", humanize.Comma(int64(float64(leaves)/treeDuration.Seconds())))
+	rehashTree(node.LeftNode())
+	rehashTree(node.RightNode())
 
-	require.NoError(t, multiTree.Close())
-}
-
-func TestTree_Build_Load(t *testing.T) {
-	tmpDir := t.TempDir()
-	opts := testutil.NewTreeBuildOptions().With10_000()
-	multiTree := NewMultiTree(NewTestLogger(), tmpDir, TreeOptions{
-		HeightFilter: 0, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
-	})
-	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
-	require.True(t, ok)
-	for _, sk := range itrs.StoreKeys() {
-		require.NoError(t, multiTree.MountTree(sk))
-	}
-	t.Log("building initial tree to version 10,000")
-	_, err := multiTree.TestBuild(opts)
-	require.NoError(t, err)
-
-	t.Log("snapshot tree at version 10,000")
-	// take a snapshot at version 10,000
-	require.NoError(t, multiTree.SnapshotConcurrently())
-	require.NoError(t, multiTree.Close())
-
-	t.Log("import snapshot into new tree")
-	mt, err := ImportMultiTree(NewTestLogger(), 10_000, tmpDir, DefaultTreeOptions())
-	require.NoError(t, err)
-
-	t.Log("build tree to version 12,000 and verify hash")
-	require.NoError(t, opts.Iterator.Next())
-	require.Equal(t, int64(10_001), opts.Iterator.Version())
-	opts.Until = 12_000
-	opts.UntilHash = "3a037f8dd67a5e1a9ef83a53b81c619c9ac0233abee6f34a400fb9b9dfbb4f8d"
-	_, err = mt.TestBuild(opts)
-	require.NoError(t, err)
-	require.NoError(t, mt.Close())
+	node.HashNode()
 }
 
 func TestTreeSanity(t *testing.T) {
@@ -93,9 +40,9 @@ func TestTreeSanity(t *testing.T) {
 		{
 			name: "sqlite",
 			treeFn: func() *Tree {
-				pool := NewNodePool()
+				pool := nodepool.NewNodePool()
 				dbPath := t.TempDir()
-				sql, err := NewSqliteDb(pool, SqliteDbOptions{Path: dbPath})
+				sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: dbPath})
 				// sql, err := NewInMemorySqliteDb(pool)
 				require.NoError(t, err)
 				return NewTree(sql, pool, DefaultTreeOptions())
@@ -109,13 +56,13 @@ func TestTreeSanity(t *testing.T) {
 		{
 			name: "no db",
 			treeFn: func() *Tree {
-				pool := NewNodePool()
+				pool := nodepool.NewNodePool()
 				return NewTree(nil, pool, DefaultTreeOptions())
 			},
 			hashFn: func(tree *Tree) []byte {
 				rehashTree(tree.root)
 				tree.version.Add(1)
-				return tree.root.hash
+				return tree.root.Hash()
 			},
 		},
 	}
@@ -147,13 +94,13 @@ func TestTreeSanity(t *testing.T) {
 				case 1:
 					h := tc.hashFn(tree)
 					require.Equal(t, "48c3113b8ba523d3d539d8aea6fce28814e5688340ba7334935c1248b6c11c7a", hex.EncodeToString(h))
-					require.Equal(t, int64(104938), tree.root.size)
-					fmt.Printf("version=%d, hash=%x size=%d\n", itr.Version(), h, tree.root.size)
+					require.Equal(t, int64(104938), tree.root.Size())
+					fmt.Printf("version=%d, hash=%x size=%d\n", itr.Version(), h, tree.root.Size())
 				case 150:
 					h := tc.hashFn(tree)
 					require.Equal(t, "04c42dd1cec683cbbd4974027e4b003b848e389a33d03d7a9105183e6d108dd9", hex.EncodeToString(h))
-					require.Equal(t, int64(105030), tree.root.size)
-					fmt.Printf("version=%d, hash=%x size=%d\n", itr.Version(), h, tree.root.size)
+					require.Equal(t, int64(105030), tree.root.Size())
+					fmt.Printf("version=%d, hash=%x size=%d\n", itr.Version(), h, tree.root.Size())
 				}
 			}
 		})
@@ -161,9 +108,9 @@ func TestTreeSanity(t *testing.T) {
 }
 
 func Test_EmptyTree(t *testing.T) {
-	pool := NewNodePool()
+	pool := nodepool.NewNodePool()
 	dbPath := t.TempDir()
-	sql, err := NewSqliteDb(pool, SqliteDbOptions{Path: dbPath})
+	sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: dbPath})
 	require.NoError(t, err)
 	tree := NewTree(sql, pool, DefaultTreeOptions())
 
@@ -212,9 +159,9 @@ func Test_Replay(t *testing.T) {
 	itr, err := gen.Iterator()
 	require.NoError(t, err)
 
-	pool := NewNodePool()
+	pool := nodepool.NewNodePool()
 	tmpDir := t.TempDir()
-	sql, err := NewSqliteDb(pool, SqliteDbOptions{Path: tmpDir})
+	sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: tmpDir})
 	require.NoError(t, err)
 	opts := DefaultTreeOptions()
 	tree := NewTree(sql, pool, opts)
@@ -274,7 +221,7 @@ func Test_Replay(t *testing.T) {
 
 	ingest(1, 150)
 
-	sql, err = NewSqliteDb(pool, SqliteDbOptions{Path: tmpDir})
+	sql, err = sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: tmpDir})
 	require.NoError(t, err)
 	tree = NewTree(sql, pool, opts)
 	err = tree.LoadVersion(140)
@@ -283,7 +230,7 @@ func Test_Replay(t *testing.T) {
 	require.NoError(t, err)
 	ingest(141, 170)
 
-	sql, err = NewSqliteDb(pool, SqliteDbOptions{Path: tmpDir})
+	sql, err = sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: tmpDir})
 	require.NoError(t, err)
 	tree = NewTree(sql, pool, opts)
 	err = tree.LoadVersion(170)
@@ -311,9 +258,9 @@ func Test_Prune_Logic(t *testing.T) {
 	itr, err := gen.Iterator()
 	require.NoError(t, err)
 
-	pool := NewNodePool()
+	pool := nodepool.NewNodePool()
 	tmpDir := t.TempDir()
-	sql, err := NewSqliteDb(pool, SqliteDbOptions{Path: tmpDir, ShardTrees: false, Logger: NewDebugLogger()})
+	sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: tmpDir, ShardTrees: false, Logger: logger.NewDebugLogger()})
 	require.NoError(t, err)
 	treeOpts := DefaultTreeOptions()
 	tree := NewTree(sql, pool, treeOpts)

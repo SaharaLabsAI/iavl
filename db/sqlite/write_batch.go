@@ -9,17 +9,19 @@ import (
 	"github.com/eatonphil/gosqlite"
 	"lukechampine.com/blake3"
 
+	"github.com/cosmos/iavl/v2/db"
 	"github.com/cosmos/iavl/v2/logger"
 	"github.com/cosmos/iavl/v2/metrics"
 	"github.com/cosmos/iavl/v2/pool"
-	"github.com/cosmos/iavl/v2/types"
 	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
-type SqliteBatch struct {
-	tree types.UpdatedTree
+const defaultWriteBatchSize = 200_000
 
-	sql     *SqliteDb
+type WriteBatch struct {
+	updates *db.DirtyNodes
+
+	sql     *WriteDB
 	size    int64
 	logger  logger.Logger
 	metrics metrics.Proxy
@@ -35,7 +37,7 @@ type SqliteBatch struct {
 	treeOrphan *gosqlite.Stmt
 }
 
-func (b *SqliteBatch) newChangeLogBatch() (err error) {
+func (b *WriteBatch) newChangeLogBatch() (err error) {
 	if err = b.sql.leafWrite.Begin(); err != nil {
 		return err
 	}
@@ -44,7 +46,7 @@ func (b *SqliteBatch) newChangeLogBatch() (err error) {
 	return nil
 }
 
-func (b *SqliteBatch) changelogMaybeCommit() (err error) {
+func (b *WriteBatch) changelogMaybeCommit() (err error) {
 	if b.leafCount%b.size == 0 {
 		if err = b.changelogBatchCommitBegin(); err != nil {
 			return err
@@ -53,15 +55,15 @@ func (b *SqliteBatch) changelogMaybeCommit() (err error) {
 	return nil
 }
 
-func (b *SqliteBatch) changelogBatchCommitBegin() error {
+func (b *WriteBatch) changelogBatchCommitBegin() error {
 	return b.sql.leafWrite.Exec("Commit; Begin")
 }
 
-func (b *SqliteBatch) execBranchOrphan(nodeKey nodetypes.NodeKey) error {
-	return b.treeOrphan.Exec(nodeKey.Version(), int(nodeKey.Sequence()), b.tree.Version())
+func (b *WriteBatch) execBranchOrphan(nodeKey nodetypes.NodeKey) error {
+	return b.treeOrphan.Exec(nodeKey.Version(), int(nodeKey.Sequence()), b.updates.Version)
 }
 
-func (b *SqliteBatch) newTreeBatch() (err error) {
+func (b *WriteBatch) newTreeBatch() (err error) {
 	if err = b.sql.treeWrite.Begin(); err != nil {
 		return err
 	}
@@ -70,7 +72,7 @@ func (b *SqliteBatch) newTreeBatch() (err error) {
 	return err
 }
 
-func (b *SqliteBatch) treeBatchCommitBegin() error {
+func (b *WriteBatch) treeBatchCommitBegin() error {
 	if err := b.sql.treeWrite.Exec("Commit; Begin"); err != nil {
 		return err
 	}
@@ -89,7 +91,7 @@ func (b *SqliteBatch) treeBatchCommitBegin() error {
 	return nil
 }
 
-func (b *SqliteBatch) treeMaybeCommit() (err error) {
+func (b *WriteBatch) treeMaybeCommit() (err error) {
 	if b.treeCount%b.size == 0 {
 		if err = b.treeBatchCommitBegin(); err != nil {
 			return err
@@ -98,7 +100,7 @@ func (b *SqliteBatch) treeMaybeCommit() (err error) {
 	return nil
 }
 
-func (b *SqliteBatch) saveLeaves() (int64, error) {
+func (b *WriteBatch) saveLeaves() (int64, error) {
 	b.leafInsert = b.sql.leafInsert
 	b.leafOrphan = b.sql.leafOrphan
 	b.leafCount = 0
@@ -120,7 +122,7 @@ func (b *SqliteBatch) saveLeaves() (int64, error) {
 	buf := pool.BufPool.Get().(*bytes.Buffer)
 	defer pool.BufPool.Put(buf)
 
-	for i, leaf := range b.tree.Updates().Leaves {
+	for _, leaf := range b.updates.Leaves {
 		b.leafCount++
 
 		buf.Reset()
@@ -138,20 +140,9 @@ func (b *SqliteBatch) saveLeaves() (int64, error) {
 		if err = b.changelogMaybeCommit(); err != nil {
 			return 0, err
 		}
-
-		if b.tree.HeightFilter() > 0 {
-			originalLeaf := b.tree.Updates().Leaves[i]
-			if i != 0 {
-				// evict leaf
-				b.tree.ReturnNode(originalLeaf)
-			} else if originalLeaf.NodeKey() != b.tree.Root().NodeKey() {
-				// never evict the root if it's a leaf
-				b.tree.ReturnNode(originalLeaf)
-			}
-		}
 	}
 
-	for _, leafDelete := range b.tree.Updates().Deletes {
+	for _, leafDelete := range b.updates.Deletes {
 		b.leafCount++
 		if err = b.leafInsert.Exec(leafDelete.DeleteKey.Version(), int(leafDelete.DeleteKey.Sequence()), leafDelete.LeafKey, nil); err != nil {
 			return 0, err
@@ -161,9 +152,9 @@ func (b *SqliteBatch) saveLeaves() (int64, error) {
 		}
 	}
 
-	for _, orphan := range b.tree.Updates().LeafOrphans {
+	for _, orphan := range b.updates.LeafOrphans {
 		b.leafCount++
-		if err = b.leafOrphan.Exec(orphan.Version(), int(orphan.Sequence()), b.tree.Version()); err != nil {
+		if err = b.leafOrphan.Exec(orphan.Version(), int(orphan.Sequence()), b.updates.Version); err != nil {
 			return 0, err
 		}
 		if err = b.changelogMaybeCommit(); err != nil {
@@ -187,18 +178,18 @@ func (b *SqliteBatch) saveLeaves() (int64, error) {
 	return b.leafCount, nil
 }
 
-func (b *SqliteBatch) saveBranches() (n int64, err error) {
+func (b *WriteBatch) saveBranches() (n int64, err error) {
 	b.treeInsert = b.sql.treeInsert
 	b.treeOrphan = b.sql.treeOrphan
 	b.treeCount = 0
 
-	shardID := ToShardID(b.tree.Version())
+	shardID := ToShardID(b.updates.Version)
 	if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
 		return 0, err
 	}
 
 	b.logger.Debug(fmt.Sprintf("save branches db=tree version=%d shard=%d orphans=%s",
-		b.tree.Version(), shardID, humanize.Comma(int64(len(b.tree.Updates().BranchOrphans)))))
+		b.updates.Version, shardID, humanize.Comma(int64(len(b.updates.BranchOrphans)))))
 
 	if err = b.newTreeBatch(); err != nil {
 		return 0, err
@@ -216,7 +207,7 @@ func (b *SqliteBatch) saveBranches() (n int64, err error) {
 	buf := pool.BufPool.Get().(*bytes.Buffer)
 	defer pool.BufPool.Put(buf)
 
-	for i, branch := range b.tree.Updates().Branches {
+	for i, branch := range b.updates.Branches {
 		b.treeCount++
 
 		shardID := ToShardID(branch.Version())
@@ -238,17 +229,13 @@ func (b *SqliteBatch) saveBranches() (n int64, err error) {
 			return 0, err
 		}
 
-		originalNode := b.tree.Updates().Branches[i]
+		originalNode := b.updates.Branches[i]
 		originalNode.SetDirty(false)
-
-		if originalNode.Evict() {
-			b.tree.ReturnNode(originalNode)
-		}
 	}
 
-	for _, orphan := range b.tree.Updates().BranchOrphans {
+	for _, orphan := range b.updates.BranchOrphans {
 		b.treeCount++
-		err = b.execBranchOrphan(*orphan)
+		err = b.execBranchOrphan(orphan)
 		if err != nil {
 			return 0, err
 		}

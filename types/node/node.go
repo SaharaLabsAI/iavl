@@ -80,14 +80,14 @@ func (node *Node) RightNode() *Node {
 	return node.rightNode
 }
 
-func (node *Node) RightNodeKey() *NodeKey {
+func (node *Node) RightNodeKey() NodeKey {
 	node.CheckValid()
-	return &node.rightNodeKey
+	return node.rightNodeKey
 }
 
-func (node *Node) LeftNodeKey() *NodeKey {
+func (node *Node) LeftNodeKey() NodeKey {
 	node.CheckValid()
-	return &node.leftNodeKey
+	return node.leftNodeKey
 }
 
 func (node *Node) varSize() uint64 {

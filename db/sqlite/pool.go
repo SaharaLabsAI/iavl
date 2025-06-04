@@ -156,12 +156,12 @@ type ConnPool struct {
 
 	conns []*SqliteReadConn
 
-	logger Logger
+	logger logger.Logger
 
 	mu sync.Mutex
 }
 
-func NewConnPool(opts *SqliteDbOptions, MaxPoolSize int, logger Logger) *ConnPool {
+func NewConnPool(opts *SqliteDbOptions, MaxPoolSize int, logger logger.Logger) *ConnPool {
 	return &ConnPool{
 		opts:   opts,
 		conns:  make([]*SqliteReadConn, 0, MaxPoolSize),
@@ -214,12 +214,12 @@ type IterPool struct {
 	kvIterators map[int]*gosqlite.Stmt
 	kvItrConns  map[int]*SqliteReadConn
 
-	logger Logger
+	logger logger.Logger
 
 	mu sync.Mutex
 }
 
-func NewIterPool(logger Logger) *IterPool {
+func NewIterPool(logger logger.Logger) *IterPool {
 	return &IterPool{
 		kvIterators: make(map[int]*gosqlite.Stmt),
 		kvItrConns:  make(map[int]*SqliteReadConn),

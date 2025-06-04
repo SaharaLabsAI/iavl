@@ -1,81 +1,32 @@
 package sqlite
 
 import (
-	"bytes"
-	"errors"
+	"context"
 	"fmt"
 	"os"
-	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
 	api "github.com/kocubinski/costor-api"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cosmos/iavl/v2/constants"
 	"github.com/cosmos/iavl/v2/db"
 	"github.com/cosmos/iavl/v2/logger"
 	"github.com/cosmos/iavl/v2/metrics"
-	"github.com/cosmos/iavl/v2/pool"
 	nodepool "github.com/cosmos/iavl/v2/pool/node"
 	nodetypes "github.com/cosmos/iavl/v2/types/node"
 )
 
-const defaultSQLitePath = "/tmp/iavl2"
-const defaultMaxPoolSize = 1000
-const defaultPageSize = 4096 * 2 // 8K
-const defaultThreadsCount = 8
-const defaultAnalysisLimit = 2000
-const defaultIncrementalVacuum = 50
-const defaultWriteCacheSize = -256 * 1024 // 256M
-
-// journal mode is database wide, only need to set once on write connections
-const defaultJournalMode = "WAL"
-
-// We cannot guarantee that read connection are not shared between different go routine
-const openReadOnlyMode = gosqlite.OPEN_READONLY | gosqlite.OPEN_FULLMUTEX
-
-type ConnectionType int
-
-const (
-	UseOption ConnectionType = iota
-	Immutable
-	ReadOnly
-)
-
-type SqliteDbOptions struct {
-	Path          string
-	Mode          int
-	MmapSize      uint64
-	WalSize       int
-	CacheSize     int
-	ConnArgs      string
-	TempStoreSize int
-	ShardTrees    bool
-	MaxPoolSize   int
-
-	BusyTimeout    int
-	ThreadsCount   int
-	StatementCache int
-
-	Logger  logger.Logger
-	Metrics metrics.Proxy
-
-	walPages int
-
-	OptimizeOnStart bool
-}
-
 type SqliteDb struct {
 	opts SqliteDbOptions
 
-	nodePool *nodepool.NodePool
+	writeDb     *WriteDB
+	writeEv     *WriteEventLoop
+	writeCancel context.CancelFunc
 
-	// 2 separate databases and 2 separate connections.  the underlying databases have different WAL policies
-	// therefore separation is required.
-	leafWrite *gosqlite.Conn
-	treeWrite *gosqlite.Conn
+	nodePool *nodepool.NodePool
 
 	// Used by block producer or syncer
 	read *SqliteReadConn
@@ -88,145 +39,6 @@ type SqliteDb struct {
 	logger  logger.Logger
 
 	useReadPool bool
-
-	branchShards *BranchShards
-
-	leafInsert *gosqlite.Stmt
-	leafOrphan *gosqlite.Stmt
-	treeInsert *BranchShardInsert
-	treeOrphan *gosqlite.Stmt
-}
-
-func getPageSize() int {
-	pageSize := os.Getpagesize()
-
-	for pageSize < defaultPageSize {
-		pageSize = pageSize * 2
-	}
-
-	return pageSize
-}
-
-func defaultSqliteDbOptions(opts SqliteDbOptions) SqliteDbOptions {
-	if opts.Path == "" {
-		opts.Path = defaultSQLitePath
-	}
-	// NOTE: mutex mode is set on open func call not here
-	if opts.Mode == 0 {
-		opts.Mode = gosqlite.OPEN_READWRITE | gosqlite.OPEN_CREATE
-	}
-	if opts.MmapSize == 0 {
-		// opts.MmapSize = 512 * 1024 * 1024
-		opts.MmapSize = 0 // disable mmap, it only map the first N bytes of data into memory
-	}
-	if opts.WalSize == 0 {
-		opts.WalSize = 1024 * 1024 * 100
-	}
-	if opts.CacheSize == 0 {
-		// 1G
-		opts.CacheSize = -1 * 1024 * 1024
-	}
-	if opts.TempStoreSize == 0 {
-		// 200M
-		opts.TempStoreSize = 200 * 1024 * 1024
-	}
-	if opts.Metrics == nil {
-		opts.Metrics = metrics.NilMetrics{}
-	}
-
-	opts.walPages = opts.WalSize / getPageSize()
-
-	opts.ShardTrees = false
-
-	if opts.MaxPoolSize == 0 {
-		opts.MaxPoolSize = defaultMaxPoolSize
-	}
-
-	if opts.BusyTimeout == 0 {
-		opts.BusyTimeout = 2000
-	}
-
-	if opts.ThreadsCount == 0 {
-		opts.ThreadsCount = defaultThreadsCount
-	}
-
-	if opts.StatementCache == 0 {
-		opts.StatementCache = 100
-	}
-
-	if opts.Logger == nil {
-		opts.Logger = logger.NewNopLogger()
-	}
-
-	return opts
-}
-
-func (opts SqliteDbOptions) connArgs(ty ConnectionType) string {
-	// Short circuit for unit tests
-	if strings.Contains(opts.ConnArgs, "mode=memory&cache=shared") {
-		return opts.ConnArgs
-	}
-
-	var args string
-
-	switch ty {
-	case UseOption:
-		if opts.ConnArgs == "" {
-			return ""
-		}
-		args = opts.ConnArgs
-	case ReadOnly:
-		args = "mode=ro"
-	// NOTE: immutable freeze database view on connection creation, it may not see latest changes compare to
-	// first readonly then pragma immutable=1 later.
-	case Immutable:
-		args = "mode=ro&immutable=1"
-	}
-
-	return fmt.Sprintf("?%s", args)
-}
-
-func (opts SqliteDbOptions) leafConnectionString(ty ConnectionType) string {
-	return fmt.Sprintf("file:%s/changelog.sqlite%s", opts.Path, opts.connArgs(ty))
-}
-
-func (opts SqliteDbOptions) treeConnectionString(ty ConnectionType) string {
-	return fmt.Sprintf("file:%s/tree.sqlite%s", opts.Path, opts.connArgs(ty))
-}
-
-func (opts SqliteDbOptions) EstimateMmapSize() (uint64, error) {
-	opts.Logger.Info("calculate mmap size")
-	opts.Logger.Info(fmt.Sprintf("leaf connection string: %s", opts.leafConnectionString(ReadOnly)))
-	conn, err := gosqlite.Open(opts.leafConnectionString(ReadOnly), openReadOnlyMode)
-	if err != nil {
-		return 0, err
-	}
-	q, err := conn.Prepare("SELECT SUM(pgsize) FROM dbstat WHERE name = 'leaf'")
-	if err != nil {
-		return 0, err
-	}
-	hasRow, err := q.Step()
-	if err != nil {
-		return 0, err
-	}
-	if !hasRow {
-		return 0, errors.New("no row")
-	}
-	var leafSize int64
-	err = q.Scan(&leafSize)
-	if err != nil {
-		return 0, err
-	}
-	if err = q.Close(); err != nil {
-		return 0, err
-	}
-	if err = conn.Close(); err != nil {
-		return 0, err
-	}
-	mmapSize := uint64(float64(leafSize) * 1.3)
-	opts.Logger.Info(fmt.Sprintf("leaf mmap size: %s", humanize.Bytes(mmapSize)))
-
-	return mmapSize, nil
 }
 
 func NewInMemorySqliteDb(pool *nodepool.NodePool) (*SqliteDb, error) {
@@ -239,10 +51,11 @@ func NewSqliteDb(pool *nodepool.NodePool, opts SqliteDbOptions) (*SqliteDb, erro
 	opts = defaultSqliteDbOptions(opts)
 
 	sql := &SqliteDb{
-		opts:     opts,
-		nodePool: pool,
-		metrics:  opts.Metrics,
-		logger:   opts.Logger,
+		opts:        opts,
+		nodePool:    pool,
+		metrics:     opts.Metrics,
+		logger:      opts.Logger,
+		useReadPool: false,
 	}
 
 	if !api.IsFileExistent(opts.Path) {
@@ -252,34 +65,24 @@ func NewSqliteDb(pool *nodepool.NodePool, opts SqliteDbOptions) (*SqliteDb, erro
 		}
 	}
 
-	if err = sql.resetWriteConn(); err != nil {
+	sql.writeDb, err = NewWriteDB(opts)
+	if err != nil {
 		return nil, err
 	}
 
-	if err = sql.createTableIfNotExists(); err != nil {
-		return nil, err
-	}
-
-	sql.branchShards = NewBranchShards()
-	if err := sql.branchShards.ReloadShardIDs(sql); err != nil {
-		return nil, err
-	}
-
-	if err = sql.prepareInsertStatements(); err != nil {
-		return nil, err
-	}
+	sql.writeEv, sql.writeCancel = NewWriteEventLoop(sql.writeDb, opts.Logger, opts.Metrics)
 
 	if sql.opts.OptimizeOnStart {
-		if err = sql.runAnalyze(); err != nil {
+		if err = runAnalyze(sql.writeDb); err != nil {
 			return nil, err
 		}
 
-		if err = sql.runOptimize(); err != nil {
+		if err = runOptimize(sql.writeDb); err != nil {
 			return nil, err
 		}
 	}
 
-	// if err = sql.runQuickCheck(); err != nil {
+	// if err = runQuickCheck(sql.writeDb); err != nil {
 	// 	return nil, err
 	// }
 
@@ -297,259 +100,64 @@ func (sql *SqliteDb) Type() db.DBType {
 	return db.SQLITE
 }
 
-func (sql *SqliteDb) createShardTableIfNotExists(shardID int) error {
-	tableName := fmt.Sprintf("tree_%d", shardID)
-	q, err := sql.treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
-	if err != nil {
-		return err
-	}
-	defer q.Close()
+func (sql *SqliteDb) SaveTree(root *nodetypes.Node, version int64, updates *db.DirtyNodes) error {
+	sql.readPool.SetSavingTree()
+	defer sql.readPool.UnsetSavingTree()
 
-	if err = q.Bind(tableName); err != nil {
-		return err
-	}
-
-	hasRow, err := q.Step()
-	if err != nil {
-		return err
-	}
-
-	if hasRow {
-		return nil
-	}
-
-	sql.logger.Info(fmt.Sprintf("creating %s shard %d", sql.opts.Path, shardID))
-	return sql.treeWrite.Exec(fmt.Sprintf(
-		"CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool, PRIMARY KEY (version, sequence)) WITHOUT ROWID;", shardID))
+	return sql.writeEv.SaveTree(root, version, updates)
 }
 
-func (sql *SqliteDb) createTableIfNotExists() error {
-	q, err := sql.treeWrite.Prepare("SELECT name from sqlite_master WHERE type='table' AND name='root'")
-	if err != nil {
-		return err
-	}
-	hasRow, err := q.Step()
-	if err != nil {
-		return err
-	}
-	if !hasRow {
-		pageSize := getPageSize()
-		sql.logger.Info(fmt.Sprintf("setting page size to %s", humanize.Bytes(uint64(pageSize))))
-		err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA page_size=%d; VACUUM;", pageSize))
-		if err != nil {
-			return err
-		}
-		err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA journal_mode=%s;", defaultJournalMode))
-		if err != nil {
-			return err
-		}
-		err = sql.treeWrite.Exec("PRAGMA auto_vacuum=INCREMENTAL;")
-		if err != nil {
-			return err
-		}
+// TODO: Remove
+func (sql *SqliteDb) SetInitTreeVersion(version *atomic.Int64) {
+	sql.readPool.LinkTreeVersion(version)
+}
 
-		err = sql.treeWrite.Exec(`
-CREATE TABLE branch_orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;
-CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob, PRIMARY KEY (version DESC)) WITHOUT ROWID`)
-		if err != nil {
-			return err
-		}
-	}
-	if err = q.Close(); err != nil {
-		return err
-	}
+// FIXME: read pool or readonly db for immutable tree
+func (sql *SqliteDb) GetVersioned(key []byte, version int64) ([]byte, error) {
+	return sql.read.getVersioned(version, key)
+}
 
-	q, err = sql.leafWrite.Prepare("SELECT name from sqlite_master WHERE type='table' AND name='leaf'")
-	if err != nil {
-		return err
-	}
-	if !hasRow {
-		pageSize := getPageSize()
-		err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA page_size=%d; VACUUM;", pageSize))
-		if err != nil {
-			return err
-		}
-		err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA journal_mode=%s;", defaultJournalMode))
-		if err != nil {
-			return err
-		}
-		err = sql.leafWrite.Exec("PRAGMA auto_vacuum=INCREMENTAL;")
-		if err != nil {
-			return err
-		}
+func (sql *SqliteDb) LatestVersion() (int64, error) {
+	return latestVersion(sql.opts)
+}
 
-		// NOTE: we need leaf_idx, so we cannot use `WITHOUT ROWID` because leaf_idx must store the full PRIMARY KEY
-		// as their row reference
-		err = sql.leafWrite.Exec(`
-CREATE TABLE leaf (version int, sequence int, key_hash blob, bytes blob, orphaned bool, PRIMARY KEY (key_hash, version DESC));
-CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);
-CREATE TABLE leaf_orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;`)
-		if err != nil {
-			return err
-		}
-	}
-	if err = q.Close(); err != nil {
-		return err
-	}
+func (sql *SqliteDb) ResetRead() error {
+	return sql.resetReadConn()
+}
 
+func (sql *SqliteDb) Path() string {
+	return sql.opts.Path
+}
+
+func (sql *SqliteDb) Revert(toVersion int64) error {
+	return sql.writeDb.Revert(toVersion)
+}
+
+func (sql *SqliteDb) PausePruning(pause bool) {
+	sql.writeEv.pausePruning.Store(pause)
+}
+
+func (sql *SqliteDb) SaveRoot(version int64, root *nodetypes.Node) error {
+	return sql.writeDb.SaveRoot(version, root)
+}
+
+func (sql *SqliteDb) DeleteVersionsTo(toVersion int64) error {
+	sql.writeEv.treePruneCh <- &pruneSignal{pruneVersion: toVersion}
+	sql.writeEv.leafPruneCh <- &pruneSignal{pruneVersion: toVersion}
 	return nil
 }
 
-func (sql *SqliteDb) resetWriteConn() (err error) {
-	if sql.treeWrite != nil {
-		err = sql.treeWrite.Close()
-		if err != nil {
-			return err
-		}
-	}
-	sql.treeWrite, err = gosqlite.Open(sql.opts.treeConnectionString(UseOption), sql.opts.Mode|gosqlite.OPEN_FULLMUTEX)
+func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
+	sql.writeEv.awaitTreePruned = make(chan struct{})
+
+	err := sql.DeleteVersionsTo(toVersion)
 	if err != nil {
+		sql.writeEv.awaitTreePruned = nil
 		return err
 	}
 
-	err = sql.treeWrite.Exec("PRAGMA synchronous=OFF;")
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec("PRAGMA lock_mode=NORMAL;")
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec("PRAGMA automatic_index=OFF;")
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", defaultWriteCacheSize/2))
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA journal_mode=%s;", defaultJournalMode))
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA analysis_limit=%d;", defaultAnalysisLimit))
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec("PRAGMA temp_store=MEMORY;")
-	if err != nil {
-		return err
-	}
-	err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA temp_store_size=%d;", sql.opts.TempStoreSize))
-	if err != nil {
-		return err
-	}
-
-	if err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA wal_autocheckpoint=%d", sql.opts.walPages)); err != nil {
-		return err
-	}
-
-	err = sql.treeWrite.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d;", sql.opts.BusyTimeout))
-	if err != nil {
-		return err
-	}
-
-	sql.leafWrite, err = gosqlite.Open(sql.opts.leafConnectionString(UseOption), sql.opts.Mode|gosqlite.OPEN_FULLMUTEX)
-	if err != nil {
-		return err
-	}
-
-	err = sql.leafWrite.Exec("PRAGMA synchronous=OFF;")
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec("PRAGMA lock_mode=NORMAL;")
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec("PRAGMA automatic_index=OFF;")
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", defaultWriteCacheSize/2))
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA journal_mode=%s;", defaultJournalMode))
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA analysis_limit=%d;", defaultAnalysisLimit))
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec("PRAGMA temp_store=MEMORY;")
-	if err != nil {
-		return err
-	}
-	err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA temp_store_size=%d;", sql.opts.TempStoreSize))
-	if err != nil {
-		return err
-	}
-
-	if err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA wal_autocheckpoint=%d", sql.opts.walPages)); err != nil {
-		return err
-	}
-
-	err = sql.leafWrite.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d;", sql.opts.BusyTimeout))
-	if err != nil {
-		return err
-	}
-
-	return err
-}
-
-func (sql *SqliteDb) preapreBranchShardInsertStatement(shardID int64) (*gosqlite.Stmt, error) {
-	// Every time we mutate node during balance/set/remove, touched branch nodes will always get new node key.
-	// But Test_Replay will try to ingest nodes so we should allow REPLACE here.
-	return sql.treeWrite.Prepare(fmt.Sprintf(
-		"INSERT OR REPLACE INTO tree_%d (version, sequence, bytes) VALUES (?, ?, ?)",
-		shardID,
-	))
-}
-
-func (sql *SqliteDb) prepareInsertStatements() (err error) {
-	if sql.leafInsert != nil {
-		if err = sql.leafInsert.Close(); err != nil {
-			return err
-		}
-	}
-	sql.leafInsert, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf (version, sequence, key_hash, bytes) VALUES (?, ?, ?, ?)")
-	if err != nil {
-		return err
-	}
-
-	if sql.leafOrphan != nil {
-		if err = sql.leafOrphan.Close(); err != nil {
-			return err
-		}
-	}
-	sql.leafOrphan, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf_orphan (version, sequence, at) VALUES (?, ?, ?)")
-	if err != nil {
-		return err
-	}
-
-	if sql.treeOrphan != nil {
-		if err = sql.treeOrphan.Close(); err != nil {
-			return err
-		}
-	}
-	sql.treeOrphan, err = sql.treeWrite.Prepare("INSERT OR REPLACE INTO branch_orphan (version, sequence, at) VALUES (?, ?, ?)")
-	if err != nil {
-		return err
-	}
-
-	if sql.treeInsert != nil {
-		if err = sql.treeInsert.Close(); err != nil {
-			return err
-		}
-	}
-	sql.treeInsert, err = PrepareBranchShardInsert(sql, sql.branchShards)
-	if err != nil {
-		return err
-	}
-
-	return err
+	<-sql.writeEv.awaitTreePruned
+	return nil
 }
 
 func (sql *SqliteDb) newReadConn() (*SqliteReadConn, error) {
@@ -762,28 +370,15 @@ func (sql *SqliteDb) getNode(nodeKey nodetypes.NodeKey) (*nodetypes.Node, error)
 }
 
 func (sql *SqliteDb) Close() error {
-	if sql.leafInsert != nil {
-		if err := sql.leafInsert.Close(); err != nil {
-			sql.logger.Warn("failed to close leaf insert statement", "err", err)
+	if sql.writeDb != nil {
+		if err := sql.writeDb.Close(); err != nil {
+			return err
 		}
 	}
 
-	if sql.leafOrphan != nil {
-		if err := sql.leafOrphan.Close(); err != nil {
-			sql.logger.Warn("failed to close leaf orphan statement", "err", err)
-		}
-	}
-
-	if sql.treeInsert != nil {
-		if err := sql.treeInsert.Close(); err != nil {
-			sql.logger.Warn("failed to close tree insert statement", "err", err)
-		}
-	}
-
-	if sql.treeOrphan != nil {
-		if err := sql.treeOrphan.Close(); err != nil {
-			sql.logger.Warn("failed to close tree orphan statement", "err", err)
-		}
+	if sql.writeCancel != nil {
+		sql.writeCancel()
+		sql.writeEv.awaitStop()
 	}
 
 	if err := sql.closeHangingIterators(); err != nil {
@@ -810,47 +405,11 @@ func (sql *SqliteDb) Close() error {
 		}
 	}
 
-	if sql.leafWrite != nil {
-		if err := sql.leafWrite.Close(); err != nil {
-			return err
-		}
-	}
-
-	if sql.treeWrite != nil {
-		if err := sql.treeWrite.Close(); err != nil {
-			return err
-		}
-	}
-
 	if sql.nodePool != nil {
 		sql.nodePool = nil
 	}
 
 	return nil
-}
-
-func (sql *SqliteDb) SaveRoot(version int64, node *nodetypes.Node) error {
-	if node != nil {
-		buf := pool.BufPool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.BufPool.Put(buf)
-
-		err := node.EncodeWithBuffer(buf)
-		if err != nil {
-			return err
-		}
-		bz := buf.Bytes()
-
-		err = sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version, node_version, node_sequence, bytes) VALUES (?, ?, ?, ?)",
-			version, node.NodeKey().Version(), int(node.NodeKey().Sequence()), bz)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-	// for an empty root a sentinel is saved
-	return sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version) VALUES (?)", version)
 }
 
 func (sql *SqliteDb) LoadRoot(version int64) (*nodetypes.Node, error) {
@@ -893,27 +452,7 @@ func (sql *SqliteDb) LoadRoot(version int64) (*nodetypes.Node, error) {
 		}
 	}
 
-	if err := sql.ResetShardQueries(); err != nil {
-		return nil, err
-	}
-
 	return root, nil
-}
-
-func (sql *SqliteDb) ResetShardQueries() error {
-	// if sql.read != nil {
-	// 	if err := sql.read.ResetShardQueries(); err != nil {
-	// 		return err
-	// 	}
-	// }
-	//
-	// go func() {
-	// 	if sql.readPool != nil {
-	// 		sql.readPool.ResetShardQueries()
-	// 	}
-	// }()
-
-	return nil
 }
 
 func (sql *SqliteDb) WarmLeaves() error {
@@ -970,106 +509,6 @@ func (sql *SqliteDb) WarmLeaves() error {
 	sql.logger.Info(fmt.Sprintf("warmed %s leaves in %s", humanize.Comma(cnt), time.Since(start)))
 
 	return stmt.Close()
-}
-
-func (sql *SqliteDb) GetRightNode(node *nodetypes.Node) (*nodetypes.Node, error) {
-	if node.IsLeaf() {
-		return nil, errors.New("leaf node has no children")
-	}
-
-	var (
-		rightNode *nodetypes.Node
-		err       error
-	)
-
-	if constants.IsLeafSeq(node.RightNodeKey().Sequence()) {
-		rightNode, err = sql.getLeaf(*node.RightNodeKey())
-	} else {
-		rightNode, err = sql.getNode(*node.RightNodeKey())
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get right node node_key=%s height=%d path=%s: %w",
-			node.RightNodeKey(), node.SubTreeHeight(), sql.opts.Path, err)
-	}
-
-	return rightNode, nil
-}
-
-func (sql *SqliteDb) GetLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
-	if node.IsLeaf() {
-		return nil, errors.New("leaf node has no children")
-	}
-
-	var (
-		leftNode *nodetypes.Node
-		err      error
-	)
-
-	if constants.IsLeafSeq(node.LeftNodeKey().Sequence()) {
-		leftNode, err = sql.getLeaf(*node.LeftNodeKey())
-	} else {
-		leftNode, err = sql.getNode(*node.LeftNodeKey())
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get left node node_key=%s height=%d path=%s: %w",
-			node.LeftNodeKey(), node.SubTreeHeight(), sql.opts.Path, err)
-	}
-
-	return leftNode, nil
-}
-
-func (sql *SqliteDb) isSharded() (bool, error) {
-	q, err := sql.treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tree_%'")
-	if err != nil {
-		return false, err
-	}
-	var cnt int
-	for {
-		hasRow, err := q.Step()
-		if err != nil {
-			return false, err
-		}
-		if !hasRow {
-			break
-		}
-		cnt++
-		if cnt > 1 {
-			break
-		}
-	}
-	return cnt > 1, q.Close()
-}
-
-func (sql *SqliteDb) Revert(version int64) error {
-	if err := sql.leafWrite.Exec("DELETE FROM leaf WHERE version > ?", version); err != nil {
-		return err
-	}
-	if err := sql.leafWrite.Exec("DELETE FROM leaf_orphan WHERE at > ?", version); err != nil {
-		return err
-	}
-	if err := sql.treeWrite.Exec("DELETE FROM branch_orphan WHERE at > ?", version); err != nil {
-		return err
-	}
-
-	latestVersion, err := sql.latestRoot()
-	if err != nil {
-		return err
-	}
-
-	toShardID := ToShardID(latestVersion)
-	fromShardID := ToShardID(version)
-
-	for shardID := fromShardID; shardID <= toShardID; shardID++ {
-		if err := sql.treeWrite.Exec(fmt.Sprintf("DELETE FROM tree_%d WHERE version > ?", shardID), version); err != nil {
-			return err
-		}
-	}
-
-	if err := sql.treeWrite.Exec("DELETE FROM root WHERE version > ?", version); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (sql *SqliteDb) closeHangingIterators() error {
@@ -1229,8 +668,35 @@ func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
 	return true, nil
 }
 
-func (sql *SqliteDb) latestRoot() (version int64, err error) {
-	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
+func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
+	fromShardID := ToShardID(start)
+	toShardID := ToShardID(end)
+	if fromShardID != toShardID {
+		return nil, fmt.Errorf("from shard %d to shard %d, cross different branch shards are not support", fromShardID, toShardID)
+	}
+
+	conn, err := sql.getReadConn()
+	if err != nil {
+		return nil, err
+	}
+
+	shardID := ToShardID(start)
+
+	stmt, err = conn.Prepare(
+		fmt.Sprintf("SELECT version, sequence, bytes FROM tree_%d WHERE version >= ? AND version <= ? ORDER BY version ASC", shardID))
+	if err != nil {
+		return nil, err
+	}
+
+	if err = stmt.Bind(start, end); err != nil {
+		return nil, err
+	}
+
+	return stmt, err
+}
+
+func latestVersion(opts SqliteDbOptions) (version int64, err error) {
+	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return 0, err
 	}
@@ -1261,106 +727,4 @@ func (sql *SqliteDb) latestRoot() (version int64, err error) {
 	}
 
 	return version, nil
-}
-
-func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
-	fromShardID := ToShardID(start)
-	toShardID := ToShardID(end)
-	if fromShardID != toShardID {
-		return nil, fmt.Errorf("from shard %d to shard %d, cross different branch shards are not support", fromShardID, toShardID)
-	}
-
-	conn, err := sql.getReadConn()
-	if err != nil {
-		return nil, err
-	}
-
-	shardID := ToShardID(start)
-
-	stmt, err = conn.Prepare(
-		fmt.Sprintf("SELECT version, sequence, bytes FROM tree_%d WHERE version >= ? AND version <= ? ORDER BY version ASC", shardID))
-	if err != nil {
-		return nil, err
-	}
-
-	if err = stmt.Bind(start, end); err != nil {
-		return nil, err
-	}
-
-	return stmt, err
-}
-
-func (sql *SqliteDb) runAnalyze() error {
-	start := time.Now()
-	defer func() {
-		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_analyze")
-		sql.logger.Warn(fmt.Sprintf("tree %s indexes analyzed, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
-	}()
-
-	eg := errgroup.Group{}
-	eg.SetLimit(2)
-
-	eg.Go(func() error {
-		if err := sql.leafWrite.Exec("ANALYZE leaf_idx;"); err != nil {
-			return fmt.Errorf("failed to analyze tree leaf %s: %w", sql.opts.Path, err)
-		}
-		return nil
-	})
-
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-
-	sql.logger.Info(fmt.Sprintf("tree %s indexes analyzed", sql.opts.Path))
-
-	return nil
-}
-
-func (sql *SqliteDb) runOptimize() error {
-	start := time.Now()
-	defer func() {
-		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_optimize")
-		sql.logger.Warn(fmt.Sprintf("tree %s indexes optimized, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
-	}()
-
-	if err := sql.leafWrite.Exec("PRAGMA optimize('leaf_idx');"); err != nil {
-		return fmt.Errorf("failed to optimize tree leaf %s: %w", sql.opts.Path, err)
-	}
-
-	sql.logger.Info(fmt.Sprintf("tree %s indexes optimized", sql.opts.Path))
-
-	return nil
-}
-
-func (sql *SqliteDb) runQuickCheck() error {
-	start := time.Now()
-	defer func() {
-		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_quick_check")
-		sql.logger.Warn(fmt.Sprintf("tree %s quick check, duration %d", sql.opts.Path, time.Since(start).Milliseconds()))
-	}()
-
-	eg := errgroup.Group{}
-	eg.SetLimit(2)
-
-	eg.Go(func() error {
-		if err := sql.treeWrite.Exec("PRAGMA quick_check"); err != nil {
-			return fmt.Errorf("failed to quick check tree %s: %w", sql.opts.Path, err)
-		}
-		return nil
-	})
-
-	eg.Go(func() error {
-		if err := sql.leafWrite.Exec("PRAGMA quick_check;"); err != nil {
-			return fmt.Errorf("failed to quick check tree leaf %s: %w", sql.opts.Path, err)
-		}
-		return nil
-	})
-
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-
-	sql.logger.Info(fmt.Sprintf("tree %s quick checked", sql.opts.Path))
-
-	return nil
 }

@@ -84,7 +84,7 @@ func (tree *Tree) BatchSetRemove(operations []BatchOperation) error {
 			}
 
 			delete(tree.cache, string(op.Key))
-			newRoot, _, _, removed, err := tree.recursiveRemove(tree.root, op.Key)
+			newRoot, _, _, removed, err := tree.iterativeRemove(tree.root, op.Key)
 			if err != nil {
 				return fmt.Errorf("operation %d (remove): %w", i, err)
 			}

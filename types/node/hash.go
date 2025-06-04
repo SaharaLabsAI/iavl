@@ -16,6 +16,31 @@ var (
 	EmptyHash = sha256.New().Sum(nil)
 )
 
+// Computes the hash of the node without computing its descendants. Must be
+// called on nodes which have descendant node hashes already computed.
+func (node *Node) HashNode() []byte {
+	node.CheckValid()
+	if node.hash != nil {
+		return node.hash
+	}
+
+	h := hashpool.Sha256Pool.Get().(hash.Hash)
+	h.Reset() // Ensure the hash is clean
+
+	buf := pool.BufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+
+	node.writeHashBytesToBuffer(buf)
+	h.Write(buf.Bytes())
+
+	node.hash = h.Sum(nil)
+
+	pool.BufPool.Put(buf)
+	hashpool.Sha256Pool.Put(h)
+
+	return node.hash
+}
+
 func (node *Node) HashWith(h hash.Hash, buf *bytes.Buffer) []byte {
 	node.CheckValid()
 	if node.hash != nil {
@@ -64,7 +89,7 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 			leftHash = node.leftNode.hash
 			if leftHash == nil {
 				// Compute hash if needed - this is safer than panicking
-				leftHash = node.leftNode._hash()
+				leftHash = node.leftNode.HashNode()
 			}
 		}
 
@@ -80,7 +105,7 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 			rightHash = node.rightNode.hash
 			if rightHash == nil {
 				// Compute hash if needed - this is safer than panicking
-				rightHash = node.rightNode._hash()
+				rightHash = node.rightNode.HashNode()
 			}
 		}
 
@@ -132,31 +157,6 @@ func (node *Node) writeHashBytes(w io.Writer) error {
 	}
 
 	return nil
-}
-
-// Computes the hash of the node without computing its descendants. Must be
-// called on nodes which have descendant node hashes already computed.
-func (node *Node) _hash() []byte {
-	node.CheckValid()
-	if node.hash != nil {
-		return node.hash
-	}
-
-	h := hashpool.Sha256Pool.Get().(hash.Hash)
-	h.Reset() // Ensure the hash is clean
-
-	buf := pool.BufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-
-	node.writeHashBytesToBuffer(buf)
-	h.Write(buf.Bytes())
-
-	node.hash = h.Sum(nil)
-
-	pool.BufPool.Put(buf)
-	hashpool.Sha256Pool.Put(h)
-
-	return node.hash
 }
 
 func encodeBytes(w io.Writer, bz []byte) error {

@@ -4,7 +4,7 @@ package sqlite
 // 	dir := t.TempDir()
 // 	t.Logf("dir: %s", dir)
 //
-// 	sql, err := NewSqliteDb(nodepool.NewNodePool(), SqliteDbOptions{Path: dir})
+// 	sql, err := NewSqliteDb(nodepool.NewNodePool(), Options{Path: dir})
 //
 // 	require.NoError(t, err)
 //
@@ -133,7 +133,7 @@ package sqlite
 //
 // func Test_NewSqliteDb(t *testing.T) {
 // 	dir := t.TempDir()
-// 	sql, err := NewSqliteDb(NewNodePool(), SqliteDbOptions{Path: dir})
+// 	sql, err := NewSqliteDb(NewNodePool(), Options{Path: dir})
 // 	require.NoError(t, err)
 // 	require.NotNil(t, sql)
 // }

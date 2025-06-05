@@ -216,7 +216,7 @@ package tests
 // func Test_IteratorTree(t *testing.T) {
 // 	tmpDir := t.TempDir()
 // 	pool := iavl.NewNodePool()
-// 	sql, err := iavl.NewSqliteDb(pool, iavl.SqliteDbOptions{Path: tmpDir})
+// 	sql, err := iavl.NewSqliteDb(pool, iavl.Options{Path: tmpDir})
 // 	require.NoError(t, err)
 //
 // 	opts := iavl.DefaultOptions()

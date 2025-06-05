@@ -25,7 +25,7 @@ package snapshot
 // 			)
 // 			for _, path := range paths {
 // 				cnt++
-// 				sqlOpts := iavl.SqliteDbOptions{Path: path}
+// 				sqlOpts := iavl.Options{Path: path}
 // 				sql, err := iavl.NewSqliteDb(pool, sqlOpts)
 // 				if err != nil {
 // 					return err

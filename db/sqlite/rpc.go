@@ -22,7 +22,7 @@ type SqliteReadConn struct {
 
 	queryBranch *BranchShardQuery
 
-	opts *SqliteDbOptions
+	opts *Options
 
 	inUse  bool
 	logger logger.Logger
@@ -30,7 +30,7 @@ type SqliteReadConn struct {
 	mu sync.RWMutex
 }
 
-func NewSqliteReadConn(conn *gosqlite.Conn, opts *SqliteDbOptions, logger logger.Logger) *SqliteReadConn {
+func NewSqliteReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger) *SqliteReadConn {
 	return &SqliteReadConn{
 		conn:        conn,
 		treeVersion: 0,
@@ -40,7 +40,7 @@ func NewSqliteReadConn(conn *gosqlite.Conn, opts *SqliteDbOptions, logger logger
 	}
 }
 
-func NewSqliteImmutableReadConn(treeVersion int64, opts *SqliteDbOptions, logger logger.Logger) *SqliteReadConn {
+func NewSqliteImmutableReadConn(treeVersion int64, opts *Options, logger logger.Logger) *SqliteReadConn {
 	return &SqliteReadConn{
 		treeVersion: treeVersion,
 		opts:        opts,
@@ -168,7 +168,7 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 	return inode.DecodeValueOnly(nodeBz)
 }
 
-func (c *SqliteReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
+func (c *SqliteReadConn) GetLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	defer c.MarkIdle()
 
 	var err error
@@ -206,7 +206,7 @@ func (c *SqliteReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey)
 	return node, nil
 }
 
-func (c *SqliteReadConn) getNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
+func (c *SqliteReadConn) GetNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	defer c.MarkIdle()
 
 	var err error

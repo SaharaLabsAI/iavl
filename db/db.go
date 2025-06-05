@@ -7,26 +7,26 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-type DBType int
+type Type int
 
 const (
 	SQLITE = iota
 )
 
 type DB interface {
-	Type() DBType
+	Type() Type
 	// Readonly() ReadonlyDB
-	DBRead
-	DBWrite
+	Read
+	Write
 	Close() error
 }
 
 // FIXME: later
 type ReadonlyDB interface {
-	Type() DBType
+	Type() Type
 	// Readonly(node *nodepool.NodePool) ReadonlyDB
-	DBRead
-	DBWrite
+	Read
+	Write
 	Close() error
 }
 
@@ -37,10 +37,12 @@ type HashConn interface {
 
 type HashConnPool interface {
 	GetHashConn() (HashConn, error)
+	ReturnHashConns([]HashConn)
 }
 
-type DBRead interface {
+type Read interface {
 	Path() string
+	HashConnPool
 	ResetRead() error
 	GetLeftNode(node *inode.Node) (*inode.Node, error)
 	GetRightNode(node *inode.Node) (*inode.Node, error)
@@ -51,7 +53,7 @@ type DBRead interface {
 	SetInitTreeVersion(version *atomic.Int64)
 }
 
-type DBWrite interface {
+type Write interface {
 	SaveRoot(version int64, node *inode.Node) error
 	SaveTree(root *inode.Node, version int64, dirtyNodes *DirtyNodes) error
 	Revert(version int64) error

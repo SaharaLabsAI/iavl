@@ -26,13 +26,13 @@ type WriteDB struct {
 	treeInsert *BranchShardInsert
 	treeOrphan *gosqlite.Stmt
 
-	opts SqliteDbOptions
+	opts Options
 
 	metrics metrics.Proxy
 	logger  logger.Logger
 }
 
-func NewWriteDB(opts SqliteDbOptions) (*WriteDB, error) {
+func NewWriteDB(opts Options) (*WriteDB, error) {
 	wdb := &WriteDB{
 		opts:    opts,
 		metrics: opts.Metrics,

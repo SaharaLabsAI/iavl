@@ -74,7 +74,7 @@ package scan
 // 		Use:   "roots",
 // 		Short: "list roots",
 // 		RunE: func(cmd *cobra.Command, args []string) error {
-// 			sql, err := iavl.NewSqliteDb(iavl.NewNodePool(), iavl.SqliteDbOptions{Path: dbPath})
+// 			sql, err := iavl.NewSqliteDb(iavl.NewNodePool(), iavl.Options{Path: dbPath})
 // 			if err != nil {
 // 				return err
 // 			}

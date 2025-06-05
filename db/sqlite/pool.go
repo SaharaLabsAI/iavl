@@ -14,7 +14,7 @@ import (
 )
 
 type SqliteReadonlyConnPool struct {
-	opts *SqliteDbOptions
+	opts *Options
 
 	treeVersion *atomic.Int64
 	savingTree  atomic.Bool
@@ -28,7 +28,7 @@ type SqliteReadonlyConnPool struct {
 	mu sync.RWMutex
 }
 
-func NewSqliteReadonlyConnPool(opts *SqliteDbOptions, MaxPoolSize int) (*SqliteReadonlyConnPool, error) {
+func NewSqliteReadonlyConnPool(opts *Options, MaxPoolSize int) (*SqliteReadonlyConnPool, error) {
 	if MaxPoolSize <= 0 {
 		MaxPoolSize = defaultMaxPoolSize
 	}
@@ -152,7 +152,7 @@ func (pool *SqliteReadonlyConnPool) GetVersionDescLeafIterator(version int64, li
 }
 
 type ConnPool struct {
-	opts *SqliteDbOptions
+	opts *Options
 
 	conns []*SqliteReadConn
 
@@ -161,7 +161,7 @@ type ConnPool struct {
 	mu sync.Mutex
 }
 
-func NewConnPool(opts *SqliteDbOptions, MaxPoolSize int, logger logger.Logger) *ConnPool {
+func NewConnPool(opts *Options, MaxPoolSize int, logger logger.Logger) *ConnPool {
 	return &ConnPool{
 		opts:   opts,
 		conns:  make([]*SqliteReadConn, 0, MaxPoolSize),

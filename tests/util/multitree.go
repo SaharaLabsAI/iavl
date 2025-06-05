@@ -130,7 +130,7 @@ func (mt *MultiTree) newTree(dbPath string) (*itree.Tree, error) {
 	if _, ok := mt.treeOpts.MetricsProxy.(*metrics.StructMetrics); ok {
 		opts.MetricsProxy = metrics.NewStructMetrics()
 	}
-	sql, err := sqlite.NewSqliteDb(pool, sqlite.DefaultSqliteDbOptions(sqlite.SqliteDbOptions{
+	sql, err := sqlite.NewSqliteDb(pool, sqlite.DefaultOptions(sqlite.Options{
 		Path:    dbPath,
 		Metrics: opts.MetricsProxy,
 		Logger:  mt.logger,

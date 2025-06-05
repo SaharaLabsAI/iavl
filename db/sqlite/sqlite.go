@@ -20,7 +20,7 @@ import (
 )
 
 type SqliteDb struct {
-	opts SqliteDbOptions
+	opts Options
 
 	writeDb     *WriteDB
 	writeEv     *WriteEventLoop
@@ -42,13 +42,13 @@ type SqliteDb struct {
 }
 
 func NewInMemorySqliteDb(pool *nodepool.NodePool) (*SqliteDb, error) {
-	opts := defaultSqliteDbOptions(SqliteDbOptions{ConnArgs: "mode=memory&cache=shared"})
+	opts := defaultOptions(Options{ConnArgs: "mode=memory&cache=shared"})
 	return NewSqliteDb(pool, opts)
 }
 
-func NewSqliteDb(pool *nodepool.NodePool, opts SqliteDbOptions) (*SqliteDb, error) {
+func NewSqliteDb(pool *nodepool.NodePool, opts Options) (*SqliteDb, error) {
 	var err error
-	opts = defaultSqliteDbOptions(opts)
+	opts = defaultOptions(opts)
 
 	sql := &SqliteDb{
 		opts:        opts,
@@ -96,7 +96,7 @@ func NewSqliteDb(pool *nodepool.NodePool, opts SqliteDbOptions) (*SqliteDb, erro
 	return sql, nil
 }
 
-func (sql *SqliteDb) Type() db.DBType {
+func (sql *SqliteDb) Type() db.Type {
 	return db.SQLITE
 }
 
@@ -311,7 +311,7 @@ func (sql *SqliteDb) newHashConnection() (*SqliteReadConn, error) {
 	}, nil
 }
 
-func (sql *SqliteDb) getHashConn() (*SqliteReadConn, error) {
+func (sql *SqliteDb) GetHashConn() (db.HashConn, error) {
 	for _, conn := range sql.hashPool {
 		if conn.IsInUse() {
 			continue
@@ -332,8 +332,9 @@ func (sql *SqliteDb) getHashConn() (*SqliteReadConn, error) {
 	return conn, nil
 }
 
-func (sql *SqliteDb) returnHashConns(conns []*SqliteReadConn) {
+func (sql *SqliteDb) ReturnHashConns(conns []db.HashConn) {
 	for _, conn := range conns {
+		conn := conn.(*SqliteReadConn)
 		conn.MarkIdle()
 	}
 }
@@ -351,7 +352,7 @@ func (sql *SqliteDb) getLeaf(nodeKey inode.NodeKey) (*inode.Node, error) {
 		return nil, err
 	}
 
-	return conn.getLeaf(sql.nodePool, nodeKey)
+	return conn.GetLeaf(sql.nodePool, nodeKey)
 }
 
 func (sql *SqliteDb) getNode(nodeKey inode.NodeKey) (*inode.Node, error) {
@@ -366,7 +367,7 @@ func (sql *SqliteDb) getNode(nodeKey inode.NodeKey) (*inode.Node, error) {
 		return nil, err
 	}
 
-	return conn.getNode(sql.nodePool, nodeKey)
+	return conn.GetNode(sql.nodePool, nodeKey)
 }
 
 func (sql *SqliteDb) Close() error {
@@ -627,8 +628,8 @@ func (sql *SqliteDb) Logger() logger.Logger {
 	return sql.logger
 }
 
-func DefaultSqliteDbOptions(opts SqliteDbOptions) SqliteDbOptions {
-	return defaultSqliteDbOptions(opts)
+func DefaultOptions(opts Options) Options {
+	return defaultOptions(opts)
 }
 
 func (sql *SqliteDb) GetAt(version int64, key []byte) ([]byte, error) {
@@ -695,7 +696,7 @@ func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *
 	return stmt, err
 }
 
-func latestVersion(opts SqliteDbOptions) (version int64, err error) {
+func latestVersion(opts Options) (version int64, err error) {
 	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return 0, err

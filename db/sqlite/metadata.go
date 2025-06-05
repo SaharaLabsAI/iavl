@@ -12,13 +12,13 @@ import (
 // SqliteKVStore is a generic KV store which uses sqlite as the backend and be used by applications to store and
 // retrieve generic key-value pairs, probably for metadata.
 type SqliteKVStore struct {
-	options SqliteDbOptions
+	options Options
 	write   *gosqlite.Conn
 	read    *gosqlite.Conn
 	lock    *sync.Mutex
 }
 
-func NewSqliteKVStore(opts SqliteDbOptions) (kv *SqliteKVStore, err error) {
+func NewSqliteKVStore(opts Options) (kv *SqliteKVStore, err error) {
 	if opts.Path == "" {
 		return nil, errors.New("path cannot be empty")
 	}

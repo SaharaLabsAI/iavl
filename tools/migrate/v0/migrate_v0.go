@@ -45,7 +45,7 @@ func metadataCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			v2, err := iavlv2.NewSqliteKVStore(iavlv2.SqliteDbOptions{Path: dbv2})
+			v2, err := iavlv2.NewSqliteKVStore(iavlv2.Options{Path: dbv2})
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func latestVersionCommand() *cobra.Command {
 		Use:   "latest-version",
 		Short: "get/set the latest version in the metadata.sqlite",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			kv, err := iavlv2.NewSqliteKVStore(iavlv2.SqliteDbOptions{Path: db})
+			kv, err := iavlv2.NewSqliteKVStore(iavlv2.Options{Path: db})
 			if err != nil {
 				return err
 			}
@@ -320,7 +320,7 @@ func allCommand() *cobra.Command {
 						return
 					}
 					sql, err := iavlv2.NewSqliteDb(iavlv2.NewNodePool(),
-						iavlv2.SqliteDbOptions{
+						iavlv2.Options{
 							Path:    fmt.Sprintf("%s/%s", dbv2, sk),
 							WalSize: 1024 * 1024 * 1024,
 						})

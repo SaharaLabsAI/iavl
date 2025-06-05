@@ -35,7 +35,7 @@ const (
 	ReadOnly
 )
 
-type SqliteDbOptions struct {
+type Options struct {
 	Path          string
 	Mode          int
 	MmapSize      uint64
@@ -62,13 +62,13 @@ func getPageSize() int {
 	pageSize := os.Getpagesize()
 
 	for pageSize < defaultPageSize {
-		pageSize = pageSize * 2
+		pageSize *= pageSize
 	}
 
 	return pageSize
 }
 
-func defaultSqliteDbOptions(opts SqliteDbOptions) SqliteDbOptions {
+func defaultOptions(opts Options) Options {
 	if opts.Path == "" {
 		opts.Path = defaultSQLitePath
 	}
@@ -122,7 +122,7 @@ func defaultSqliteDbOptions(opts SqliteDbOptions) SqliteDbOptions {
 	return opts
 }
 
-func (opts SqliteDbOptions) connArgs(ty ConnectionType) string {
+func (opts Options) connArgs(ty ConnectionType) string {
 	// Short circuit for unit tests
 	if strings.Contains(opts.ConnArgs, "mode=memory&cache=shared") {
 		return opts.ConnArgs
@@ -147,15 +147,15 @@ func (opts SqliteDbOptions) connArgs(ty ConnectionType) string {
 	return fmt.Sprintf("?%s", args)
 }
 
-func (opts SqliteDbOptions) leafConnectionString(ty ConnectionType) string {
+func (opts Options) leafConnectionString(ty ConnectionType) string {
 	return fmt.Sprintf("file:%s/changelog.sqlite%s", opts.Path, opts.connArgs(ty))
 }
 
-func (opts SqliteDbOptions) treeConnectionString(ty ConnectionType) string {
+func (opts Options) treeConnectionString(ty ConnectionType) string {
 	return fmt.Sprintf("file:%s/tree.sqlite%s", opts.Path, opts.connArgs(ty))
 }
 
-func (opts SqliteDbOptions) EstimateMmapSize() (uint64, error) {
+func (opts Options) EstimateMmapSize() (uint64, error) {
 	opts.Logger.Info("calculate mmap size")
 	opts.Logger.Info(fmt.Sprintf("leaf connection string: %s", opts.leafConnectionString(ReadOnly)))
 	conn, err := gosqlite.Open(opts.leafConnectionString(ReadOnly), openReadOnlyMode)
@@ -190,7 +190,7 @@ func (opts SqliteDbOptions) EstimateMmapSize() (uint64, error) {
 	return mmapSize, nil
 }
 
-func (opts SqliteDbOptions) latestVersion() (version int64, err error) {
+func (opts Options) latestVersion() (version int64, err error) {
 	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return 0, err

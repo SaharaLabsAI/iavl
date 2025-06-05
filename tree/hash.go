@@ -1,63 +1,20 @@
 package tree
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"runtime"
+	"sort"
 	"sync"
 
+	"github.com/cosmos/iavl/v2/common/constants"
+	"github.com/cosmos/iavl/v2/common/pool"
+	hashpool "github.com/cosmos/iavl/v2/common/pool/hash"
+	"github.com/cosmos/iavl/v2/db"
 	inode "github.com/cosmos/iavl/v2/node"
 )
-
-type nodeLoadTask struct {
-	parentNode *inode.Node
-	isLeft     bool // true for left child, false for right child
-	nodeKey    inode.NodeKey
-}
-
-var loadTaskPool = &sync.Pool{
-	New: func() any {
-		return make([]nodeLoadTask, 0, 64) // Pre-allocate with reasonable capacity
-	},
-}
-
-var nodeSlicePool = &sync.Pool{
-	New: func() any {
-		return make([]*inode.Node, 0, 1024)
-	},
-}
-
-type CompactNodeBatch struct {
-	nodes     []*inode.Node
-	parentIdx []int32
-	isLeft    []bool
-	nodeKeys  []inode.NodeKey
-}
-
-func (cnb *CompactNodeBatch) reset() {
-	cnb.nodes = cnb.nodes[:0]
-	cnb.parentIdx = cnb.parentIdx[:0]
-	cnb.isLeft = cnb.isLeft[:0]
-	cnb.nodeKeys = cnb.nodeKeys[:0]
-}
-
-func (cnb *CompactNodeBatch) add(node *inode.Node, parent int32, left bool, key inode.NodeKey) {
-	cnb.nodes = append(cnb.nodes, node)
-	cnb.parentIdx = append(cnb.parentIdx, parent)
-	cnb.isLeft = append(cnb.isLeft, left)
-	cnb.nodeKeys = append(cnb.nodeKeys, key)
-}
-
-var compactBatchPool = &sync.Pool{
-	New: func() any {
-		return &CompactNodeBatch{
-			nodes:     make([]*inode.Node, 0, 256),
-			parentIdx: make([]int32, 0, 256),
-			isLeft:    make([]bool, 0, 256),
-			nodeKeys:  make([]inode.NodeKey, 0, 256),
-		}
-	},
-}
 
 // ComputeHash the node and its descendants recursively. This usually mutates all
 // descendant nodes. Returns the tree root node hash.
@@ -76,471 +33,471 @@ func (tree *Tree) computeHash() []byte {
 		return tree.root.Hash()
 	}
 
-	// tree.deepHashParallel(tree.root, 0)
-	tree.deepHash(tree.root, 0)
+	tree.deepHashParallel(tree.root, 0)
+	// tree.deepHash(tree.root, 0)
 
 	tree.hashedVersion = currentVersion
 	tree.modificationCount = 0
 	return tree.root.Hash()
 }
 
-// func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
-// 	if node == nil {
-// 		return
-// 	}
-//
-// 	// Only use sequential for extremely small trees (under 10 nodes)
-// 	estimatedNodes, _ := tree.estimateCapacity(node)
-// 	if estimatedNodes < 10 {
-// 		tree.deepHash(node, depth)
-// 		return
-// 	}
-//
-// 	// Get pooled resources to reduce allocations
-// 	allBranches := nodeSlicePool.Get().([]*inode.Node)
-// 	allLeaves := nodeSlicePool.Get().([]*inode.Node)
-// 	nodesToLoad := loadTaskPool.Get().([]nodeLoadTask)
-//
-// 	defer func() {
-// 		// Return resources to pools
-// 		allBranches = allBranches[:0]
-// 		allLeaves = allLeaves[:0]
-// 		nodesToLoad = nodesToLoad[:0]
-//
-// 		nodeSlicePool.Put(allBranches)
-// 		nodeSlicePool.Put(allLeaves)
-// 		loadTaskPool.Put(nodesToLoad)
-// 	}()
-//
-// 	// Initialize with estimated capacity
-// 	tree.dirtyNodes.Branches = make([]*inode.Node, 0, estimatedNodes)
-// 	tree.dirtyNodes.Leaves = make([]*inode.Node, 0, estimatedNodes/2)
-//
-// 	type nodeWithDepth struct {
-// 		node  *inode.Node
-// 		depth int8
-// 	}
-//
-// 	var toProcess = []nodeWithDepth{{node: node, depth: depth}}
-// 	nextTreeVersion := tree.version.Load() + 1
-//
-// 	// Phase 1: Collect nodes and identify what needs loading (match original logic)
-// 	for len(toProcess) > 0 {
-// 		current := toProcess[0]
-// 		toProcess = toProcess[1:]
-//
-// 		if current.node == nil {
-// 			continue
-// 		}
-//
-// 		// Handle leaf nodes first
-// 		if current.node.IsLeaf() {
-// 			if current.node.Version() == nextTreeVersion {
-// 				allLeaves = append(allLeaves, current.node)
-// 			}
-// 			continue
-// 		}
-//
-// 		// Skip non-dirty or non-current version branch nodes
-// 		if !current.node.Dirty() || current.node.Version() != nextTreeVersion {
-// 			continue
-// 		}
-//
-// 		// This is a dirty branch node that needs processing
-// 		allBranches = append(allBranches, current.node)
-//
-// 		// Check if children need loading
-// 		needsLeftLoad := current.node.LeftNode() == nil && !current.node.LeftNodeKey().IsEmpty()
-// 		needsRightLoad := current.node.RightNode() == nil && !current.node.RightNodeKey().IsEmpty()
-//
-// 		if needsLeftLoad {
-// 			nodesToLoad = append(nodesToLoad, nodeLoadTask{
-// 				parentNode: current.node,
-// 				isLeft:     true,
-// 				nodeKey:    current.node.LeftNodeKey(),
-// 			})
-// 		}
-//
-// 		if needsRightLoad {
-// 			nodesToLoad = append(nodesToLoad, nodeLoadTask{
-// 				parentNode: current.node,
-// 				isLeft:     false,
-// 				nodeKey:    current.node.RightNodeKey(),
-// 			})
-// 		}
-//
-// 		// Add children to processing queue if they're already loaded
-// 		if current.node.LeftNode() != nil {
-// 			toProcess = append(toProcess, nodeWithDepth{node: current.node.LeftNode(), depth: current.depth + 1})
-// 		}
-// 		if current.node.RightNode() != nil {
-// 			toProcess = append(toProcess, nodeWithDepth{node: current.node.RightNode(), depth: current.depth + 1})
-// 		}
-// 	}
-//
-// 	// Phase 2: Always attempt parallel loading if there are nodes to load
-// 	if len(nodesToLoad) > 0 {
-// 		// Use fewer connections for smaller workloads to reduce overhead
-// 		var maxConnections int
-// 		if len(nodesToLoad) < 50 {
-// 			maxConnections = 2
-// 		} else if len(nodesToLoad) < 200 {
-// 			maxConnections = 3
-// 		} else {
-// 			maxConnections = 4
-// 		}
-//
-// 		actualConnections := min(maxConnections, tree.optimizedWorkerCount(len(nodesToLoad)))
-// 		actualConnections = max(1, actualConnections) // Ensure at least 1
-//
-// 		connPool := make([]*SqliteReadConn, 0, actualConnections)
-// 		defer func() {
-// 			tree.sql.returnHashConns(connPool)
-// 		}()
-//
-// 		// Create connections - always try parallel, fallback on error
-// 		parallelLoadSuccessful := false
-// 		if actualConnections > 1 {
-// 			for i := 0; i < actualConnections; i++ {
-// 				conn, err := tree.sql.getHashConn()
-// 				if err != nil {
-// 					tree.sql.returnHashConns(connPool)
-// 					connPool = connPool[:0]
-// 					break
-// 				}
-// 				connPool = append(connPool, conn)
-// 			}
-//
-// 			if len(connPool) > 1 {
-// 				tree.loadNodesParallel(nodesToLoad, connPool)
-// 				parallelLoadSuccessful = true
-// 			}
-// 		}
-//
-// 		// Fallback to sequential loading if parallel failed or not attempted
-// 		if !parallelLoadSuccessful {
-// 			tree.loadNodesSequentially(nodesToLoad)
-// 		}
-// 	}
-//
-// 	// Phase 3: Continue tree traversal for newly loaded nodes
-// 	toProcess = []nodeWithDepth{{node: node, depth: depth}}
-// 	seen := make(map[*inode.Node]bool, len(allBranches)+len(allLeaves))
-//
-// 	for len(toProcess) > 0 {
-// 		current := toProcess[0]
-// 		toProcess = toProcess[1:]
-//
-// 		if current.node == nil || seen[current.node] {
-// 			continue
-// 		}
-// 		seen[current.node] = true
-//
-// 		if current.node.isLeaf() {
-// 			// Already handled in Phase 1
-// 			continue
-// 		}
-//
-// 		// Skip nodes that don't meet the processing criteria
-// 		if !current.node.dirty || current.node.nodeKey.Version() != nextTreeVersion {
-// 			continue
-// 		}
-//
-// 		// Add children to process queue (they should be loaded now)
-// 		if current.node.leftNode != nil {
-// 			toProcess = append(toProcess, nodeWithDepth{
-// 				node:  current.node.leftNode,
-// 				depth: current.depth + 1,
-// 			})
-// 		}
-// 		if current.node.rightNode != nil {
-// 			toProcess = append(toProcess, nodeWithDepth{
-// 				node:  current.node.rightNode,
-// 				depth: current.depth + 1,
-// 			})
-// 		}
-// 	}
-//
-// 	// Phase 4: Always parallel process leaf nodes (if any exist)
-// 	if len(allLeaves) > 0 {
-// 		leafWorkers := tree.optimizedWorkerCount(len(allLeaves))
-// 		leafWorkers = max(1, min(leafWorkers, 6)) // Cap at 6 workers, min 1
-//
-// 		if leafWorkers > 1 && len(allLeaves) > 2 { // Much lower threshold
-// 			leafChan := make(chan *inode.Node, min(len(allLeaves), 50))
-//
-// 			go func() {
-// 				defer close(leafChan)
-// 				for _, leaf := range allLeaves {
-// 					leafChan <- leaf
-// 				}
-// 			}()
-//
-// 			var leafWg sync.WaitGroup
-// 			for i := 0; i < leafWorkers; i++ {
-// 				leafWg.Add(1)
-// 				go func() {
-// 					defer leafWg.Done()
-//
-// 					h := pool.Sha256Pool.Get().(hash.Hash)
-// 					defer pool.Sha256Pool.Put(h)
-//
-// 					buf := pool.BufPool.Get().(*bytes.Buffer)
-// 					defer pool.BufPool.Put(buf)
-//
-// 					for leaf := range leafChan {
-// 						h.Reset()
-// 						buf.Reset()
-// 						leaf.HashWith(h, buf)
-// 					}
-// 				}()
-// 			}
-// 			leafWg.Wait()
-// 		} else {
-// 			// Sequential for very small workloads
-// 			h := pool.Sha256Pool.Get().(hash.Hash)
-// 			defer pool.Sha256Pool.Put(h)
-//
-// 			buf := pool.BufPool.Get().(*bytes.Buffer)
-// 			defer pool.BufPool.Put(buf)
-//
-// 			for _, leaf := range allLeaves {
-// 				h.Reset()
-// 				buf.Reset()
-// 				leaf.HashWith(h, buf)
-// 			}
-// 		}
-// 	}
-//
-// 	// Phase 5: Always parallel process branch nodes by height (if any exist)
-// 	if len(allBranches) > 0 {
-// 		heightMap := make(map[int8][]*inode.Node)
-// 		var heights []int8
-//
-// 		// Group by height
-// 		for _, branch := range allBranches {
-// 			h := branch.subtreeHeight
-// 			if _, exists := heightMap[h]; !exists {
-// 				heights = append(heights, h)
-// 			}
-// 			heightMap[h] = append(heightMap[h], branch)
-// 		}
-//
-// 		// Sort heights (process from lowest to highest)
-// 		sort.Slice(heights, func(i, j int) bool {
-// 			return heights[i] < heights[j]
-// 		})
-//
-// 		// Process by height with optimized parallelism
-// 		for _, height := range heights {
-// 			branches := heightMap[height]
-// 			branchWorkers := tree.optimizedWorkerCount(len(branches))
-// 			branchWorkers = max(1, min(branchWorkers, 4)) // Cap at 4 workers, min 1
-//
-// 			if branchWorkers > 1 && len(branches) > 1 { // Much lower threshold - parallel for 2+ nodes
-// 				branchChan := make(chan *inode.Node, min(len(branches), 20))
-//
-// 				go func() {
-// 					defer close(branchChan)
-// 					for _, branch := range branches {
-// 						branchChan <- branch
-// 					}
-// 				}()
-//
-// 				var branchWg sync.WaitGroup
-// 				for i := 0; i < branchWorkers; i++ {
-// 					branchWg.Add(1)
-// 					go func() {
-// 						defer branchWg.Done()
-//
-// 						h := hashPool.Get().(hash.Hash)
-// 						defer hashPool.Put(h)
-//
-// 						buf := bufPool.Get().(*bytes.Buffer)
-// 						defer bufPool.Put(buf)
-//
-// 						for branch := range branchChan {
-// 							if branch.leftNode != nil && branch.leftNode.hash == nil {
-// 								h.Reset()
-// 								buf.Reset()
-// 								branch.leftNode.HashWith(h, buf)
-// 							}
-// 							if branch.rightNode != nil && branch.rightNode.hash == nil {
-// 								h.Reset()
-// 								buf.Reset()
-// 								branch.rightNode.HashWith(h, buf)
-// 							}
-//
-// 							h.Reset()
-// 							buf.Reset()
-// 							branch.HashWith(h, buf)
-// 						}
-// 					}()
-// 				}
-// 				branchWg.Wait()
-// 			} else {
-// 				h := hashPool.Get().(hash.Hash)
-// 				defer hashPool.Put(h)
-//
-// 				buf := bufPool.Get().(*bytes.Buffer)
-// 				defer bufPool.Put(buf)
-//
-// 				for _, branch := range branches {
-// 					if branch.leftNode != nil && branch.leftNode.hash == nil {
-// 						h.Reset()
-// 						buf.Reset()
-// 						branch.leftNode.HashWith(h, buf)
-// 					}
-// 					if branch.rightNode != nil && branch.rightNode.hash == nil {
-// 						h.Reset()
-// 						buf.Reset()
-// 						branch.rightNode.HashWith(h, buf)
-// 					}
-//
-// 					h.Reset()
-// 					buf.Reset()
-// 					branch.HashWith(h, buf)
-// 				}
-// 			}
-// 		}
-// 	}
-//
-// 	// Copy results to tree's collections
-// 	tree.branches = make([]*inode.Node, len(allBranches))
-// 	copy(tree.branches, allBranches)
-// 	tree.leaves = make([]*inode.Node, len(allLeaves))
-// 	copy(tree.leaves, allLeaves)
-//
-// 	// Phase 6: Post-processing (same as original)
-// 	nodesToEvict := make(map[*inode.Node]bool)
-// 	nodesToReturn := make(map[*inode.Node]bool)
-//
-// 	for _, branch := range tree.branches {
-// 		if tree.heightFilter > 0 {
-// 			leftNode := branch.leftNode
-// 			rightNode := branch.rightNode
-//
-// 			if leftNode != nil && leftNode.isLeaf() {
-// 				if !leftNode.dirty {
-// 					nodesToReturn[leftNode] = true
-// 				}
-// 				branch.leftNode = nil
-// 			}
-//
-// 			if rightNode != nil && rightNode.isLeaf() {
-// 				if !rightNode.dirty {
-// 					nodesToReturn[rightNode] = true
-// 				}
-// 				branch.rightNode = nil
-// 			}
-// 		}
-//
-// 		if branch.subtreeHeight < 2 {
-// 			nodesToEvict[branch] = true
-// 		}
-// 	}
-//
-// 	for node := range nodesToEvict {
-// 		node.evictChildren()
-// 	}
-//
-// 	for node := range nodesToReturn {
-// 		tree.returnNode(node)
-// 	}
-// }
-//
-// // loadNodesParallel loads nodes in parallel using multiple database connections
-// func (tree *Tree) loadNodesParallel(tasks []nodeLoadTask, connPool []*SqliteReadConn) {
-// 	if len(tasks) == 0 {
-// 		return
-// 	}
-//
-// 	type loadResult struct {
-// 		task *nodeLoadTask
-// 		node *inode.Node
-// 		err  error
-// 	}
-//
-// 	taskChan := make(chan *nodeLoadTask, len(tasks))
-// 	resultChan := make(chan loadResult, len(tasks))
-//
-// 	// Send all tasks to channel
-// 	for i := range tasks {
-// 		taskChan <- &tasks[i]
-// 	}
-// 	close(taskChan)
-//
-// 	// Start worker goroutines
-// 	var wg sync.WaitGroup
-// 	maxWorkers := min(len(connPool), len(tasks))
-//
-// 	for i := 0; i < maxWorkers; i++ {
-// 		wg.Add(1)
-// 		go func(connIdx int) {
-// 			defer wg.Done()
-// 			conn := connPool[connIdx]
-//
-// 			for task := range taskChan {
-// 				var loadedNode *inode.Node
-// 				var err error
-//
-// 				// Load node from database using the dedicated connection
-// 				if isLeafSeq(task.nodeKey.Sequence()) {
-// 					loadedNode, err = conn.getLeaf(tree.nodePool, task.nodeKey)
-// 				} else {
-// 					loadedNode, err = conn.getNode(tree.nodePool, task.nodeKey)
-// 				}
-//
-// 				resultChan <- loadResult{
-// 					task: task,
-// 					node: loadedNode,
-// 					err:  err,
-// 				}
-// 			}
-// 		}(i)
-// 	}
-//
-// 	// Collect results
-// 	go func() {
-// 		wg.Wait()
-// 		close(resultChan)
-// 	}()
-//
-// 	// Process results and update parent nodes
-// 	for result := range resultChan {
-// 		if result.err != nil {
-// 			panic(fmt.Sprintf("Error loading node %s: %v", result.task.nodeKey, result.err))
-// 		}
-//
-// 		if result.node == nil {
-// 			panic(fmt.Sprintf("Node not found: %s", result.task.nodeKey))
-// 		}
-//
-// 		// Update parent node with loaded child
-// 		if result.task.isLeft {
-// 			result.task.parentNode.leftNode = result.node
-// 		} else {
-// 			result.task.parentNode.rightNode = result.node
-// 		}
-// 	}
-// }
-//
-// // loadNodesSequentially is a fallback method for sequential loading
-// func (tree *Tree) loadNodesSequentially(tasks []nodeLoadTask) {
-// 	for _, task := range tasks {
-// 		var err error
-//
-// 		if task.isLeft {
-// 			_, err = task.parentNode.getLeftNode(tree)
-// 		} else {
-// 			_, err = task.parentNode.getRightNode(tree)
-// 		}
-//
-// 		if err != nil {
-// 			panic(fmt.Sprintf("Error loading node sequentially: %v", err))
-// 		}
-// 	}
-// }
+func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
+	if node == nil {
+		return
+	}
+
+	// Only use sequential for extremely small trees (under 10 nodes)
+	estimatedNodes, _ := tree.estimateCapacity(node)
+	if estimatedNodes < 10 {
+		tree.deepHash(node, depth)
+		return
+	}
+
+	// Get pooled resources to reduce allocations
+	allBranches := nodeSlicePool.Get().([]*inode.Node)
+	allLeaves := nodeSlicePool.Get().([]*inode.Node)
+	nodesToLoad := loadTaskPool.Get().([]nodeLoadTask)
+
+	defer func() {
+		// Return resources to pools
+		allBranches = allBranches[:0]
+		allLeaves = allLeaves[:0]
+		nodesToLoad = nodesToLoad[:0]
+
+		nodeSlicePool.Put(allBranches)
+		nodeSlicePool.Put(allLeaves)
+		loadTaskPool.Put(nodesToLoad)
+	}()
+
+	// Initialize with estimated capacity
+	tree.dirtyNodes.Branches = make([]*inode.Node, 0, estimatedNodes)
+	tree.dirtyNodes.Leaves = make([]*inode.Node, 0, estimatedNodes/2)
+
+	type nodeWithDepth struct {
+		node  *inode.Node
+		depth int8
+	}
+
+	var toProcess = []nodeWithDepth{{node: node, depth: depth}}
+	nextTreeVersion := tree.version.Load() + 1
+
+	// Phase 1: Collect nodes and identify what needs loading (match original logic)
+	for len(toProcess) > 0 {
+		current := toProcess[0]
+		toProcess = toProcess[1:]
+
+		if current.node == nil {
+			continue
+		}
+
+		// Handle leaf nodes first
+		if current.node.IsLeaf() {
+			if current.node.Version() == nextTreeVersion {
+				allLeaves = append(allLeaves, current.node)
+			}
+			continue
+		}
+
+		// Skip non-dirty or non-current version branch nodes
+		if !current.node.Dirty() || current.node.Version() != nextTreeVersion {
+			continue
+		}
+
+		// This is a dirty branch node that needs processing
+		allBranches = append(allBranches, current.node)
+
+		// Check if children need loading
+		needsLeftLoad := current.node.LeftNode() == nil && !current.node.LeftNodeKey().IsEmpty()
+		needsRightLoad := current.node.RightNode() == nil && !current.node.RightNodeKey().IsEmpty()
+
+		if needsLeftLoad {
+			nodesToLoad = append(nodesToLoad, nodeLoadTask{
+				parentNode: current.node,
+				isLeft:     true,
+				nodeKey:    current.node.LeftNodeKey(),
+			})
+		}
+
+		if needsRightLoad {
+			nodesToLoad = append(nodesToLoad, nodeLoadTask{
+				parentNode: current.node,
+				isLeft:     false,
+				nodeKey:    current.node.RightNodeKey(),
+			})
+		}
+
+		// Add children to processing queue if they're already loaded
+		if current.node.LeftNode() != nil {
+			toProcess = append(toProcess, nodeWithDepth{node: current.node.LeftNode(), depth: current.depth + 1})
+		}
+		if current.node.RightNode() != nil {
+			toProcess = append(toProcess, nodeWithDepth{node: current.node.RightNode(), depth: current.depth + 1})
+		}
+	}
+
+	// Phase 2: Always attempt parallel loading if there are nodes to load
+	if len(nodesToLoad) > 0 {
+		// Use fewer connections for smaller workloads to reduce overhead
+		var maxConnections int
+		if len(nodesToLoad) < 50 {
+			maxConnections = 2
+		} else if len(nodesToLoad) < 200 {
+			maxConnections = 3
+		} else {
+			maxConnections = 4
+		}
+
+		actualConnections := min(maxConnections, tree.optimizedWorkerCount(len(nodesToLoad)))
+		actualConnections = max(1, actualConnections) // Ensure at least 1
+
+		connPool := make([]db.HashConn, 0, actualConnections)
+		defer func() {
+			tree.db.ReturnHashConns(connPool)
+		}()
+
+		// Create connections - always try parallel, fallback on error
+		parallelLoadSuccessful := false
+		if actualConnections > 1 {
+			for i := 0; i < actualConnections; i++ {
+				conn, err := tree.db.GetHashConn()
+				if err != nil {
+					tree.db.ReturnHashConns(connPool)
+					connPool = connPool[:0]
+					break
+				}
+				connPool = append(connPool, conn)
+			}
+
+			if len(connPool) > 1 {
+				tree.loadNodesParallel(nodesToLoad, connPool)
+				parallelLoadSuccessful = true
+			}
+		}
+
+		// Fallback to sequential loading if parallel failed or not attempted
+		if !parallelLoadSuccessful {
+			tree.loadNodesSequentially(nodesToLoad)
+		}
+	}
+
+	// Phase 3: Continue tree traversal for newly loaded nodes
+	toProcess = []nodeWithDepth{{node: node, depth: depth}}
+	seen := make(map[*inode.Node]bool, len(allBranches)+len(allLeaves))
+
+	for len(toProcess) > 0 {
+		current := toProcess[0]
+		toProcess = toProcess[1:]
+
+		if current.node == nil || seen[current.node] {
+			continue
+		}
+		seen[current.node] = true
+
+		if current.node.IsLeaf() {
+			// Already handled in Phase 1
+			continue
+		}
+
+		// Skip nodes that don't meet the processing criteria
+		if !current.node.Dirty() || current.node.Version() != nextTreeVersion {
+			continue
+		}
+
+		// Add children to process queue (they should be loaded now)
+		if current.node.LeftNode() != nil {
+			toProcess = append(toProcess, nodeWithDepth{
+				node:  current.node.LeftNode(),
+				depth: current.depth + 1,
+			})
+		}
+		if current.node.RightNode() != nil {
+			toProcess = append(toProcess, nodeWithDepth{
+				node:  current.node.RightNode(),
+				depth: current.depth + 1,
+			})
+		}
+	}
+
+	// Phase 4: Always parallel process leaf nodes (if any exist)
+	if len(allLeaves) > 0 {
+		leafWorkers := tree.optimizedWorkerCount(len(allLeaves))
+		leafWorkers = max(1, min(leafWorkers, 6)) // Cap at 6 workers, min 1
+
+		if leafWorkers > 1 && len(allLeaves) > 2 { // Much lower threshold
+			leafChan := make(chan *inode.Node, min(len(allLeaves), 50))
+
+			go func() {
+				defer close(leafChan)
+				for _, leaf := range allLeaves {
+					leafChan <- leaf
+				}
+			}()
+
+			var leafWg sync.WaitGroup
+			for i := 0; i < leafWorkers; i++ {
+				leafWg.Add(1)
+				go func() {
+					defer leafWg.Done()
+
+					h := hashpool.Sha256Pool.Get().(hash.Hash)
+					defer hashpool.Sha256Pool.Put(h)
+
+					buf := pool.BufPool.Get().(*bytes.Buffer)
+					defer pool.BufPool.Put(buf)
+
+					for leaf := range leafChan {
+						h.Reset()
+						buf.Reset()
+						leaf.HashWith(h, buf)
+					}
+				}()
+			}
+			leafWg.Wait()
+		} else {
+			// Sequential for very small workloads
+			h := hashpool.Sha256Pool.Get().(hash.Hash)
+			defer hashpool.Sha256Pool.Put(h)
+
+			buf := pool.BufPool.Get().(*bytes.Buffer)
+			defer pool.BufPool.Put(buf)
+
+			for _, leaf := range allLeaves {
+				h.Reset()
+				buf.Reset()
+				leaf.HashWith(h, buf)
+			}
+		}
+	}
+
+	// Phase 5: Always parallel process branch nodes by height (if any exist)
+	if len(allBranches) > 0 {
+		heightMap := make(map[int8][]*inode.Node)
+		var heights []int8
+
+		// Group by height
+		for _, branch := range allBranches {
+			h := branch.SubTreeHeight()
+			if _, exists := heightMap[h]; !exists {
+				heights = append(heights, h)
+			}
+			heightMap[h] = append(heightMap[h], branch)
+		}
+
+		// Sort heights (process from lowest to highest)
+		sort.Slice(heights, func(i, j int) bool {
+			return heights[i] < heights[j]
+		})
+
+		// Process by height with optimized parallelism
+		for _, height := range heights {
+			branches := heightMap[height]
+			branchWorkers := tree.optimizedWorkerCount(len(branches))
+			branchWorkers = max(1, min(branchWorkers, 4)) // Cap at 4 workers, min 1
+
+			if branchWorkers > 1 && len(branches) > 1 { // Much lower threshold - parallel for 2+ nodes
+				branchChan := make(chan *inode.Node, min(len(branches), 20))
+
+				go func() {
+					defer close(branchChan)
+					for _, branch := range branches {
+						branchChan <- branch
+					}
+				}()
+
+				var branchWg sync.WaitGroup
+				for i := 0; i < branchWorkers; i++ {
+					branchWg.Add(1)
+					go func() {
+						defer branchWg.Done()
+
+						h := hashpool.Sha256Pool.Get().(hash.Hash)
+						defer hashpool.Sha256Pool.Put(h)
+
+						buf := pool.BufPool.Get().(*bytes.Buffer)
+						defer pool.BufPool.Put(buf)
+
+						for branch := range branchChan {
+							if branch.LeftNode() != nil && branch.LeftNode().Hash() == nil {
+								h.Reset()
+								buf.Reset()
+								branch.LeftNode().HashWith(h, buf)
+							}
+							if branch.RightNode() != nil && branch.RightNode().Hash() == nil {
+								h.Reset()
+								buf.Reset()
+								branch.RightNode().HashWith(h, buf)
+							}
+
+							h.Reset()
+							buf.Reset()
+							branch.HashWith(h, buf)
+						}
+					}()
+				}
+				branchWg.Wait()
+			} else {
+				h := hashpool.Sha256Pool.Get().(hash.Hash)
+				defer hashpool.Sha256Pool.Put(h)
+
+				buf := pool.BufPool.Get().(*bytes.Buffer)
+				defer pool.BufPool.Put(buf)
+
+				for _, branch := range branches {
+					if branch.LeftNode() != nil && branch.LeftNode().Hash() == nil {
+						h.Reset()
+						buf.Reset()
+						branch.LeftNode().HashWith(h, buf)
+					}
+					if branch.RightNode() != nil && branch.RightNode().Hash() == nil {
+						h.Reset()
+						buf.Reset()
+						branch.RightNode().HashWith(h, buf)
+					}
+
+					h.Reset()
+					buf.Reset()
+					branch.HashWith(h, buf)
+				}
+			}
+		}
+	}
+
+	// Copy results to tree's collections
+	tree.dirtyNodes.Branches = make([]*inode.Node, len(allBranches))
+	copy(tree.dirtyNodes.Branches, allBranches)
+	tree.dirtyNodes.Leaves = make([]*inode.Node, len(allLeaves))
+	copy(tree.dirtyNodes.Leaves, allLeaves)
+
+	// Phase 6: Post-processing (same as original)
+	nodesToEvict := make(map[*inode.Node]bool)
+	nodesToReturn := make(map[*inode.Node]bool)
+
+	for _, branch := range tree.dirtyNodes.Branches {
+		if tree.heightFilter > 0 {
+			leftNode := branch.LeftNode()
+			rightNode := branch.RightNode()
+
+			if leftNode != nil && leftNode.IsLeaf() {
+				if !leftNode.Dirty() {
+					nodesToReturn[leftNode] = true
+				}
+				branch.SetLeft(nil)
+			}
+
+			if rightNode != nil && rightNode.IsLeaf() {
+				if !rightNode.Dirty() {
+					nodesToReturn[rightNode] = true
+				}
+				branch.SetRight(nil)
+			}
+		}
+
+		if branch.SubTreeHeight() < 2 {
+			nodesToEvict[branch] = true
+		}
+	}
+
+	for node := range nodesToEvict {
+		node.EvictChildren()
+	}
+
+	for node := range nodesToReturn {
+		tree.returnNode(node)
+	}
+}
+
+// loadNodesParallel loads nodes in parallel using multiple database connections
+func (tree *Tree) loadNodesParallel(tasks []nodeLoadTask, connPool []db.HashConn) {
+	if len(tasks) == 0 {
+		return
+	}
+
+	type loadResult struct {
+		task *nodeLoadTask
+		node *inode.Node
+		err  error
+	}
+
+	taskChan := make(chan *nodeLoadTask, len(tasks))
+	resultChan := make(chan loadResult, len(tasks))
+
+	// Send all tasks to channel
+	for i := range tasks {
+		taskChan <- &tasks[i]
+	}
+	close(taskChan)
+
+	// Start worker goroutines
+	var wg sync.WaitGroup
+	maxWorkers := min(len(connPool), len(tasks))
+
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func(connIdx int) {
+			defer wg.Done()
+			conn := connPool[connIdx]
+
+			for task := range taskChan {
+				var loadedNode *inode.Node
+				var err error
+
+				// Load node from database using the dedicated connection
+				if constants.IsLeafSeq(task.nodeKey.Sequence()) {
+					loadedNode, err = conn.GetLeaf(tree.nodePool, task.nodeKey)
+				} else {
+					loadedNode, err = conn.GetNode(tree.nodePool, task.nodeKey)
+				}
+
+				resultChan <- loadResult{
+					task: task,
+					node: loadedNode,
+					err:  err,
+				}
+			}
+		}(i)
+	}
+
+	// Collect results
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Process results and update parent nodes
+	for result := range resultChan {
+		if result.err != nil {
+			panic(fmt.Sprintf("Error loading node %s: %v", result.task.nodeKey, result.err))
+		}
+
+		if result.node == nil {
+			panic(fmt.Sprintf("Node not found: %s", result.task.nodeKey))
+		}
+
+		// Update parent node with loaded child
+		if result.task.isLeft {
+			result.task.parentNode.SetLeft(result.node)
+		} else {
+			result.task.parentNode.SetRight(result.node)
+		}
+	}
+}
+
+// loadNodesSequentially is a fallback method for sequential loading
+func (tree *Tree) loadNodesSequentially(tasks []nodeLoadTask) {
+	for _, task := range tasks {
+		var err error
+
+		if task.isLeft {
+			_, err = tree.getLeftNode(task.parentNode)
+		} else {
+			_, err = tree.getRightNode(task.parentNode)
+		}
+
+		if err != nil {
+			panic(fmt.Sprintf("Error loading node sequentially: %v", err))
+		}
+	}
+}
 
 // Original deepHash function kept for reference
 func (tree *Tree) deepHash(node *inode.Node, depth int8) {
@@ -693,4 +650,22 @@ func (tree *Tree) optimizedWorkerCount(workload int) int {
 		return min(8, cpuCount)
 	}
 	return min(16, cpuCount*2) // For large workloads
+}
+
+type nodeLoadTask struct {
+	parentNode *inode.Node
+	isLeft     bool // true for left child, false for right child
+	nodeKey    inode.NodeKey
+}
+
+var loadTaskPool = &sync.Pool{
+	New: func() any {
+		return make([]nodeLoadTask, 0, 64) // Pre-allocate with reasonable capacity
+	},
+}
+
+var nodeSlicePool = &sync.Pool{
+	New: func() any {
+		return make([]*inode.Node, 0, 1024)
+	},
 }

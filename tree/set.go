@@ -3,10 +3,44 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/cosmos/iavl/v2/common/constants"
 	inode "github.com/cosmos/iavl/v2/node"
 )
+
+// Set sets a key in the working tree. Nil values are invalid. The given
+// key/value byte slices must not be modified after this call, since they point
+// to slices stored within IAVL. It returns true when an existing value was
+// updated, while false means it was a new key.
+func (tree *Tree) Set(key, value []byte) (updated bool, err error) {
+	if tree.immutable {
+		panic("set on immutable tree")
+	}
+
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_set")
+	}
+
+	tree.rw.Lock()
+	defer tree.rw.Unlock()
+
+	updated, err = tree.set(key, value)
+	if err != nil {
+		return false, err
+	}
+	if updated {
+		tree.metrics.IncrCounter(1, constants.MetricsNamespace, "tree_update")
+	} else {
+		tree.metrics.IncrCounter(1, constants.MetricsNamespace, "tree_new_node")
+	}
+
+	tree.modificationCount++
+	tree.cache[string(key)] = value
+	delete(tree.deleted, string(key))
+
+	return updated, nil
+}
 
 func (tree *Tree) set(key []byte, value []byte) (updated bool, err error) {
 	if value == nil {

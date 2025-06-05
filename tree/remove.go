@@ -3,9 +3,48 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"time"
 
+	"github.com/cosmos/iavl/v2/common/constants"
 	inode "github.com/cosmos/iavl/v2/node"
 )
+
+// Remove removes a key from the working tree. The given key byte slice should not be modified
+// after this call, since it may point to data stored inside IAVL.
+func (tree *Tree) Remove(key []byte) ([]byte, bool, error) {
+	if tree.immutable {
+		panic("Remove on immutable tree")
+	}
+
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_remove")
+	}
+
+	tree.rw.Lock()
+	defer tree.rw.Unlock()
+
+	if tree.root == nil {
+		return nil, false, nil
+	}
+
+	delete(tree.cache, string(key))
+
+	newRoot, _, value, removed, err := tree.iterativeRemove(tree.root, key)
+	if err != nil {
+		return nil, false, err
+	}
+	if !removed {
+		return nil, false, nil
+	}
+
+	tree.deleted[string(key)] = true
+	tree.modificationCount++
+
+	tree.metrics.IncrCounter(1, constants.MetricsNamespace, "tree_delete")
+
+	tree.root = newRoot
+	return value, true, nil
+}
 
 // removes the node corresponding to the passed key and balances the tree.
 // It returns:

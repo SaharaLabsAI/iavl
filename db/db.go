@@ -15,7 +15,8 @@ const (
 
 type DB interface {
 	Type() Type
-	// Readonly() ReadonlyDB
+	Readonly(node *nodepool.NodePool) ReadonlyDB
+	Import
 	Read
 	Write
 	Close() error
@@ -24,7 +25,8 @@ type DB interface {
 // FIXME: later
 type ReadonlyDB interface {
 	Type() Type
-	// Readonly(node *nodepool.NodePool) ReadonlyDB
+	Readonly(node *nodepool.NodePool) ReadonlyDB
+	Import
 	Read
 	Write
 	Close() error
@@ -60,4 +62,10 @@ type Write interface {
 	PausePruning(pause bool)
 	DeleteVersionsTo(toVersion int64) error
 	DeleteVersionsToSync(toVersion int64) error
+}
+
+type Import interface {
+	PrepareImport() error
+	FinishImport() error
+	WriteBatch(*DirtyNodes) error
 }

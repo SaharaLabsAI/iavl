@@ -96,6 +96,17 @@ func NewSqliteDb(pool *nodepool.NodePool, opts Options) (*SqliteDb, error) {
 	return sql, nil
 }
 
+func (sql *SqliteDb) Readonly(nodepool *nodepool.NodePool) db.ReadonlyDB {
+	return &SqliteDb{
+		opts:        sql.opts,
+		nodePool:    nodepool,
+		readPool:    sql.readPool,
+		metrics:     sql.metrics,
+		logger:      sql.logger,
+		useReadPool: sql.useReadPool,
+	}
+}
+
 func (sql *SqliteDb) Type() db.Type {
 	return db.SQLITE
 }

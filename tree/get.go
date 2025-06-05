@@ -41,6 +41,14 @@ func (tree *Tree) Get(key []byte) ([]byte, error) {
 	return tree.db.GetVersioned(key, treeVersion)
 }
 
+func (tree *Tree) GetFromRoot(key []byte) ([]byte, error) {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	_, val, err := tree.get(tree.root, key)
+	return val, err
+}
+
 func (tree *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
 	if tree.metricsProxy != nil {
 		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
@@ -79,4 +87,29 @@ func (tree *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, 
 	index += node.Size() - rightNode.Size()
 
 	return index, value, nil
+}
+
+func (tree *Tree) getByIndex(node *inode.Node, index int64) (key []byte, value []byte, err error) {
+	if node.IsLeaf() {
+		if index == 0 {
+			return node.Key(), node.Value(), nil
+		}
+		return nil, nil, nil
+	}
+
+	leftNode, err := tree.getLeftNode(node)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if index < leftNode.Size() {
+		return tree.getByIndex(leftNode, index)
+	}
+
+	rightNode, err := tree.getRightNode(node)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return tree.getByIndex(rightNode, index-leftNode.Size())
 }

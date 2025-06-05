@@ -5,6 +5,24 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
+func (tree *Tree) getRecentRoot(version int64) (bool, *inode.Node) {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	if version != tree.version.Load() {
+		return false, nil
+	}
+
+	// Version == 0
+	if tree.root == nil {
+		return false, nil
+	}
+
+	root := *tree.root
+
+	return true, &root
+}
+
 func (tree *Tree) mutateNode(node *inode.Node) {
 	// this seems to be true only in certain cases
 	// we should investigate if we can remove this check
@@ -84,9 +102,4 @@ func (tree *Tree) addDelete(node *inode.Node) {
 	}
 
 	tree.dirtyNodes.AddDelete(tree.nextLeafNodeKey(), node.Key())
-}
-
-// NOTE: This func is primary for unit test(no db, pure memory tree)
-func (tree *Tree) AdvanceVersion() {
-	tree.version.Add(1)
 }

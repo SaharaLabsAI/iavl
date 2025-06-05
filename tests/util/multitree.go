@@ -415,6 +415,7 @@ func (mt *MultiTree) TestBuild(opts *TreeBuildOptions) (int64, error) {
 
 			changesetByStore[node.StoreKey] = append(changesetByStore[node.StoreKey], op)
 
+			// Comment out to test BatchSetRemove
 			// tree, ok := mt.Trees[node.StoreKey]
 			// if !ok {
 			// 	if err := mt.MountTree(node.StoreKey); err != nil {
@@ -443,7 +444,7 @@ func (mt *MultiTree) TestBuild(opts *TreeBuildOptions) (int64, error) {
 		}
 
 		for storeKey, ops := range changesetByStore {
-			cnt = cnt + int64(len(ops))
+			cnt += int64(len(ops))
 			tree, ok := mt.Trees[storeKey]
 			if !ok {
 				if err := mt.MountTree(storeKey); err != nil {
@@ -460,7 +461,7 @@ func (mt *MultiTree) TestBuild(opts *TreeBuildOptions) (int64, error) {
 				if err := report(); err != nil {
 					return cnt, err
 				}
-				rateCount = rateCount + sampleRate
+				rateCount += sampleRate
 			}
 		}
 

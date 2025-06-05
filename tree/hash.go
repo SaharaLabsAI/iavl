@@ -16,6 +16,36 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
+func (tree *Tree) Hash() []byte {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	if tree.root == nil {
+		return inode.EmptyHash
+	}
+	return tree.root.Hash()
+}
+func (tree *Tree) WorkingHash() []byte {
+	tree.rw.Lock()
+	defer tree.rw.Unlock()
+
+	if tree.root == nil {
+		return inode.EmptyHash
+	}
+
+	if tree.root.Hash() != nil {
+		return tree.root.Hash()
+	}
+
+	// if err := tree.sql.closeHangingIterators(); err != nil {
+	// 	panic(err)
+	// }
+
+	hash := tree.computeHash()
+
+	return hash
+}
+
 // ComputeHash the node and its descendants recursively. This usually mutates all
 // descendant nodes. Returns the tree root node hash.
 // If the tree is empty (i.e. the node is nil), returns the hash of an empty input,

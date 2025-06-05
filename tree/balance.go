@@ -8,7 +8,6 @@ import (
 )
 
 // NOTE: assumes that node can be modified
-// TODO: optimize balance & rotate
 func (t *Tree) balance(node *inode.Node) (newSelf *inode.Node, err error) {
 	if node.Hash() != nil {
 		return nil, errors.New("unexpected balance() call on persisted node")

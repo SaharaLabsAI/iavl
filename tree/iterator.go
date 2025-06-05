@@ -15,7 +15,7 @@ type Iterator interface {
 	// CONTRACT: start, end readonly []byte
 	Domain() (start []byte, end []byte)
 
-	// Valid returns whether the current iterator is valid. Once invalid, the TreeIterator remains
+	// Valid returns whether the current iterator is valid. Once invalid, the LeafIterator remains
 	// invalid forever.
 	Valid() bool
 
@@ -39,7 +39,7 @@ type Iterator interface {
 }
 
 var (
-	_ Iterator = (*TreeIterator)(nil)
+	_ Iterator = (*LeafIterator)(nil)
 	// _ Iterator = (*KVIterator)(nil)
 	// _ Iterator = (*WrongBranchHashIterator)(nil)
 )
@@ -49,7 +49,7 @@ type iteratorStackEntry struct {
 	state int // 0: process left, 1: process right, 2: process self
 }
 
-type TreeIterator struct {
+type LeafIterator struct {
 	tree       *Tree
 	start, end []byte // iteration domain
 	ascending  bool   // ascending traversal
@@ -65,15 +65,15 @@ type TreeIterator struct {
 	metrics metrics.Proxy
 }
 
-func (i *TreeIterator) Domain() (start []byte, end []byte) {
+func (i *LeafIterator) Domain() (start []byte, end []byte) {
 	return i.start, i.end
 }
 
-func (i *TreeIterator) Valid() bool {
+func (i *LeafIterator) Valid() bool {
 	return i.valid
 }
 
-func (i *TreeIterator) Next() {
+func (i *LeafIterator) Next() {
 	defer func() {
 		if !i.valid {
 			i.Close()
@@ -98,7 +98,7 @@ func (i *TreeIterator) Next() {
 	i.started = true
 }
 
-func (i *TreeIterator) stepAscend() {
+func (i *LeafIterator) stepAscend() {
 	for len(i.stack) > 0 {
 		currentEntry := &i.stack[len(i.stack)-1]
 		node := currentEntry.node
@@ -191,7 +191,7 @@ func (i *TreeIterator) stepAscend() {
 	i.valid = false
 }
 
-func (i *TreeIterator) stepDescend() {
+func (i *LeafIterator) stepDescend() {
 	for len(i.stack) > 0 {
 		currentEntry := &i.stack[len(i.stack)-1]
 		node := currentEntry.node
@@ -299,7 +299,7 @@ func (i *TreeIterator) stepDescend() {
 	i.valid = false
 }
 
-func (i *TreeIterator) isPastEndAscend(key []byte) bool {
+func (i *LeafIterator) isPastEndAscend(key []byte) bool {
 	if i.end == nil {
 		return false
 	}
@@ -309,29 +309,29 @@ func (i *TreeIterator) isPastEndAscend(key []byte) bool {
 	return bytes.Compare(key, i.end) >= 0
 }
 
-func (i *TreeIterator) isPastEndDescend(key []byte) bool {
+func (i *LeafIterator) isPastEndDescend(key []byte) bool {
 	if i.start == nil {
 		return false
 	}
 	return bytes.Compare(key, i.start) < 0
 }
 
-func (i *TreeIterator) Key() (key []byte) {
+func (i *LeafIterator) Key() (key []byte) {
 	return i.key
 }
 
-func (i *TreeIterator) Value() (value []byte) {
+func (i *LeafIterator) Value() (value []byte) {
 	v := make([]byte, len(i.value))
 	copy(v, i.value)
 
 	return v
 }
 
-func (i *TreeIterator) Error() error {
+func (i *LeafIterator) Error() error {
 	return i.err
 }
 
-func (i *TreeIterator) Close() error {
+func (i *LeafIterator) Close() error {
 	if i.tree != nil && i.tree.nodePool != nil {
 		for len(i.stack) > 0 {
 			entry := i.stack[len(i.stack)-1]
@@ -353,11 +353,11 @@ func (i *TreeIterator) Close() error {
 	return i.err
 }
 
-func (i *TreeIterator) addNodeToStack(node *inode.Node, state int) {
+func (i *LeafIterator) addNodeToStack(node *inode.Node, state int) {
 	i.stack = append(i.stack, iteratorStackEntry{node: node, state: state})
 }
 
-func (i *TreeIterator) removeNodeFromStack() *inode.Node {
+func (i *LeafIterator) removeNodeFromStack() *inode.Node {
 	if len(i.stack) == 0 {
 		return nil
 	}
@@ -370,7 +370,7 @@ func (i *TreeIterator) removeNodeFromStack() *inode.Node {
 	return node
 }
 
-func (i *TreeIterator) initializeIteratorStack(root *inode.Node) {
+func (i *LeafIterator) initializeIteratorStack(root *inode.Node) {
 	if root != nil {
 		// Make a copy of the root if it's from a different pool
 		rootToAdd := root
@@ -414,7 +414,7 @@ func (tree *Tree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err
 
 	itTree := newIterTree(tree)
 
-	itr = &TreeIterator{
+	itr = &LeafIterator{
 		tree:      itTree,
 		start:     start,
 		end:       end,
@@ -425,7 +425,7 @@ func (tree *Tree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err
 		metrics:   tree.metricsProxy,
 	}
 
-	treeItr := itr.(*TreeIterator)
+	treeItr := itr.(*LeafIterator)
 	treeItr.initializeIteratorStack(itTree.root)
 
 	if tree.metricsProxy != nil {
@@ -444,7 +444,7 @@ func (tree *Tree) ReverseIterator(start, end []byte) (itr Iterator, err error) {
 
 	itTree := newIterTree(tree)
 
-	itr = &TreeIterator{
+	itr = &LeafIterator{
 		tree:      itTree,
 		start:     start,
 		end:       end,
@@ -455,7 +455,7 @@ func (tree *Tree) ReverseIterator(start, end []byte) (itr Iterator, err error) {
 		metrics:   tree.metricsProxy,
 	}
 
-	treeItr := itr.(*TreeIterator)
+	treeItr := itr.(*LeafIterator)
 	treeItr.initializeIteratorStack(itTree.root)
 
 	if tree.metricsProxy != nil {
@@ -479,7 +479,7 @@ func (tree *Tree) IterateRecent(version int64, start, end []byte, ascending bool
 
 	itTree := newIterTree(tree)
 
-	itr := &TreeIterator{
+	itr := &LeafIterator{
 		tree:      itTree,
 		start:     start,
 		end:       end,

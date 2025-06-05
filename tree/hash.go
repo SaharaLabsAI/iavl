@@ -25,6 +25,7 @@ func (tree *Tree) Hash() []byte {
 	}
 	return tree.root.Hash()
 }
+
 func (tree *Tree) WorkingHash() []byte {
 	tree.rw.Lock()
 	defer tree.rw.Unlock()

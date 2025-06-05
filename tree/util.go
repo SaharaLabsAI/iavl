@@ -103,3 +103,7 @@ func (tree *Tree) addDelete(node *inode.Node) {
 
 	tree.dirtyNodes.AddDelete(tree.nextLeafNodeKey(), node.Key())
 }
+
+func (tree *Tree) nextVersion() int64 {
+	return tree.version.Load() + 1
+}

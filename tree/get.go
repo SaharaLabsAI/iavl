@@ -49,6 +49,44 @@ func (tree *Tree) GetFromRoot(key []byte) ([]byte, error) {
 	return val, err
 }
 
+func (tree *Tree) GetRecent(version int64, key []byte) (bool, []byte, error) {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	got, root := tree.getRecentRoot(version)
+	if !got {
+		return false, nil, nil
+	}
+	if root == nil {
+		return true, nil, nil
+	}
+
+	_, val, err := tree.get(root, key)
+	return true, val, err
+}
+
+func (tree *Tree) GetWithIndex(key []byte) (int64, []byte, error) {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	if tree.root == nil {
+		return 0, nil, nil
+	}
+
+	return tree.get(tree.root, key)
+}
+
+func (tree *Tree) GetByIndex(index int64) (key []byte, value []byte, err error) {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	if tree.root == nil {
+		return nil, nil, nil
+	}
+
+	return tree.getByIndex(tree.root, index)
+}
+
 func (tree *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
 	if tree.metricsProxy != nil {
 		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")

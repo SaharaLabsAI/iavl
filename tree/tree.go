@@ -77,13 +77,6 @@ func (tree *Tree) VersionExists(version int64) (bool, error) {
 	return exists, nil
 }
 
-func (tree *Tree) Root() *inode.Node {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	return tree.root
-}
-
 func (tree *Tree) Version() int64 {
 	return tree.version.Load()
 }
@@ -126,6 +119,65 @@ func (tree *Tree) LoadVersion(version int64) (err error) {
 	tree.deleted = make(map[string]bool)
 
 	return nil
+}
+
+func (tree *Tree) SetInitialVersion(version int64) error {
+	if tree.immutable {
+		panic("set initial version on immutable tree")
+	}
+
+	var err error
+
+	tree.version.Store(version - 1)
+
+	return err
+}
+
+func (tree *Tree) Root() *inode.Node {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.root
+}
+
+func (tree *Tree) Path() string {
+	return tree.db.Path()
+}
+
+func (tree *Tree) Metrics() metrics.Proxy {
+	return tree.metrics
+}
+
+func (tree *Tree) WorkingSize() int64 {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.workingSize
+}
+
+func (tree *Tree) WorkingBytes() uint64 {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.workingBytes
+}
+
+func (tree *Tree) Size() int64 {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.root.Size()
+}
+
+func (tree *Tree) Height() int8 {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.root.SubTreeHeight()
+}
+
+func (tree *Tree) Close() error {
+	return tree.db.Close()
 }
 
 func (tree *Tree) SaveVersion() ([]byte, int64, error) {
@@ -181,114 +233,8 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	return rootHash, savedTreeVersion, nil
 }
 
-func (tree *Tree) Metrics() metrics.Proxy {
-	return tree.metrics
-}
-
-func (tree *Tree) WorkingSize() int64 {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	return tree.workingSize
-}
-
-func (tree *Tree) WorkingBytes() uint64 {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	return tree.workingBytes
-}
-
-func (tree *Tree) Size() int64 {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	return tree.root.Size()
-}
-
-func (tree *Tree) Height() int8 {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	return tree.root.SubTreeHeight()
-}
-
-func (tree *Tree) Close() error {
-	return tree.db.Close()
-}
-
-func (tree *Tree) PausePruning(pause bool) {
-	tree.db.PausePruning(pause)
-}
-
-func (tree *Tree) DeleteVersionsTo(toVersion int64) error {
-	return tree.db.DeleteVersionsTo(toVersion)
-}
-
-func (tree *Tree) DeleteVersionsToSync(toVersion int64) error {
-	return tree.db.DeleteVersionsToSync(toVersion)
-}
-
-func (tree *Tree) GetWithIndex(key []byte) (int64, []byte, error) {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	if tree.root == nil {
-		return 0, nil, nil
-	}
-
-	return tree.get(tree.root, key)
-}
-
-func (tree *Tree) GetByIndex(index int64) (key []byte, value []byte, err error) {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	if tree.root == nil {
-		return nil, nil, nil
-	}
-
-	return tree.getByIndex(tree.root, index)
-}
-
-func (tree *Tree) SetInitialVersion(version int64) error {
-	if tree.immutable {
-		panic("set initial version on immutable tree")
-	}
-
-	var err error
-
-	tree.version.Store(version - 1)
-
-	return err
-}
-
-func (tree *Tree) GetRecent(version int64, key []byte) (bool, []byte, error) {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	got, root := tree.getRecentRoot(version)
-	if !got {
-		return false, nil, nil
-	}
-	if root == nil {
-		return true, nil, nil
-	}
-
-	_, val, err := tree.get(root, key)
-	return true, val, err
-}
-
-func (tree *Tree) Path() string {
-	return tree.db.Path()
-}
-
 func (tree *Tree) Revert(version int64) error {
 	return tree.db.Revert(version)
-}
-
-func (tree *Tree) nextVersion() int64 {
-	return tree.version.Load() + 1
 }
 
 // FIXME

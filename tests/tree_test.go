@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"sort"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/cosmos/iavl-bench/bench"
+	"github.com/dustin/go-humanize"
 	api "github.com/kocubinski/costor-api"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cosmos/iavl/v2/common/logger"
+	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	"github.com/cosmos/iavl/v2/db/sqlite"
 	inode "github.com/cosmos/iavl/v2/node"
@@ -32,7 +35,38 @@ func rehashTree(node *inode.Node) {
 	node.HashNode()
 }
 
-func TesitreeSanity(t *testing.T) {
+func Test_TreeHash(t *testing.T) {
+	var err error
+	tmpDir := t.TempDir()
+
+	require.NoError(t, err)
+	opts := testutil.BigTreeOptions_100_000()
+
+	// this hash was validated as correct (with this same dataset) in iavl-bench
+	// with `go run . tree --seed 1234 --dataset std`
+	// at this commit tree: https://github.com/cosmos/iavl-bench/blob/3a6a1ec0a8cbec305e46239454113687da18240d/iavl-v0/main.go#L136
+	opts.Until = 100
+	opts.UntilHash = "0101e1d6f3158dcb7221acd7ed36ce19f2ef26847ffea7ce69232e362539e5cf"
+	treeOpts := itree.TreeOptions{
+		HeightFilter: 1, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
+	}
+
+	testStart := time.Now()
+	multiTree := testutil.NewMultiTree(logger.NewTestLogger(), tmpDir, treeOpts)
+	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
+	require.True(t, ok)
+	for _, sk := range itrs.StoreKeys() {
+		require.NoError(t, multiTree.MountTree(sk))
+	}
+	leaves, err := multiTree.TestBuild(opts)
+	require.NoError(t, err)
+	treeDuration := time.Since(testStart)
+	fmt.Printf("mean leaves/s: %s\n", humanize.Comma(int64(float64(leaves)/treeDuration.Seconds())))
+
+	require.NoError(t, multiTree.Close())
+}
+
+func Test_TreeSanity(t *testing.T) {
 	cases := []struct {
 		name   string
 		treeFn func() *itree.Tree
@@ -62,8 +96,7 @@ func TesitreeSanity(t *testing.T) {
 			},
 			hashFn: func(tree *itree.Tree) []byte {
 				rehashTree(tree.Root())
-				// tree.Version()
-				// tree.version.Add(1)
+				tree.AdvanceVersion()
 				return tree.Root().Hash()
 			},
 		},
@@ -242,7 +275,7 @@ func Test_Replay(t *testing.T) {
 	ingest(171, 250)
 }
 
-func Test_Prune_Logic(t *testing.T) {
+func Test_PruneLogic(t *testing.T) {
 	const versions = int64(1_000)
 	gen := bench.ChangesetGenerator{
 		StoreKey:         "replay",
@@ -297,38 +330,6 @@ func Test_Prune_Logic(t *testing.T) {
 	}
 }
 
-// func Tesitree_Hash(t *testing.T) {
-// 	var err error
-// 	tmpDir := t.TempDir()
-//
-// 	require.NoError(t, err)
-// 	opts := testutil.BigTreeOptions_100_000()
-//
-// 	// this hash was validated as correct (with this same dataset) in iavl-bench
-// 	// with `go run . tree --seed 1234 --dataset std`
-// 	// at this commit tree: https://github.com/cosmos/iavl-bench/blob/3a6a1ec0a8cbec305e46239454113687da18240d/iavl-v0/main.go#L136
-// 	opts.Until = 100
-// 	opts.UntilHash = "0101e1d6f3158dcb7221acd7ed36ce19f2ef26847ffea7ce69232e362539e5cf"
-// 	treeOpts := TreeOptions{
-// 		HeightFilter: 1, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
-// 	}
-//
-// 	testStart := time.Now()
-// 	testStart = time.Now()
-// 	multiTree := NewMultiTree(NewTestLogger(), tmpDir, treeOpts)
-// 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
-// 	require.True(t, ok)
-// 	for _, sk := range itrs.StoreKeys() {
-// 		require.NoError(t, multiTree.Mounitree(sk))
-// 	}
-// 	leaves, err := multiTree.TestBuild(opts)
-// 	require.NoError(t, err)
-// 	treeDuration := time.Since(testStart)
-// 	fmt.Printf("mean leaves/s: %s\n", humanize.Comma(int64(float64(leaves)/treeDuration.Seconds())))
-//
-// 	require.NoError(t, multiTree.Close())
-// }
-//
 // func Tesitree_Build_Load(t *testing.T) {
 // 	tmpDir := t.TempDir()
 // 	opts := testutil.NewTreeBuildOptions().With10_000()

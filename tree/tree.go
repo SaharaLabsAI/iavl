@@ -94,10 +94,10 @@ func (tree *Tree) VersionExists(version int64) (bool, error) {
 }
 
 func (tree *Tree) Root() *inode.Node {
-	tree.rw.Lock()
+	tree.rw.RLock()
 	defer tree.rw.RUnlock()
 
-	return tree.root.ShadowCopy(nil)
+	return tree.root
 }
 
 func (tree *Tree) Version() int64 {
@@ -175,6 +175,11 @@ func (tree *Tree) WorkingHash() []byte {
 	return hash
 }
 
+// NOTE: This func is primary for unit test(no db, pure memory tree)
+func (tree *Tree) AdvanceVersion() {
+	tree.version.Add(1)
+}
+
 func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	tree.rw.Lock()
 	defer tree.rw.Unlock()
@@ -228,6 +233,24 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	return rootHash, savedTreeVersion, nil
 }
 
+func (tree *Tree) Metrics() metrics.Proxy {
+	return tree.metrics
+}
+
+func (tree *Tree) WorkingSize() int64 {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.workingSize
+}
+
+func (tree *Tree) WorkingBytes() uint64 {
+	tree.rw.RLock()
+	defer tree.rw.RUnlock()
+
+	return tree.workingBytes
+}
+
 func (tree *Tree) Size() int64 {
 	tree.rw.RLock()
 	defer tree.rw.RUnlock()
@@ -256,13 +279,6 @@ func (tree *Tree) DeleteVersionsTo(toVersion int64) error {
 
 func (tree *Tree) DeleteVersionsToSync(toVersion int64) error {
 	return tree.db.DeleteVersionsToSync(toVersion)
-}
-
-func (tree *Tree) WorkingBytes() uint64 {
-	tree.rw.RLock()
-	defer tree.rw.RUnlock()
-
-	return tree.workingBytes
 }
 
 func (tree *Tree) GetWithIndex(key []byte) (int64, []byte, error) {

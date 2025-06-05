@@ -7,8 +7,8 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-func (t *Tree) ensureLeftNode(node *inode.Node) *inode.Node {
-	leftNode, err := t.getLeftNode(node)
+func (tree *Tree) ensureLeftNode(node *inode.Node) *inode.Node {
+	leftNode, err := tree.getLeftNode(node)
 	if err != nil {
 		panic(err)
 	}
@@ -16,8 +16,8 @@ func (t *Tree) ensureLeftNode(node *inode.Node) *inode.Node {
 	return leftNode
 }
 
-func (t *Tree) ensureRightNode(node *inode.Node) *inode.Node {
-	rightNode, err := t.getRightNode(node)
+func (tree *Tree) ensureRightNode(node *inode.Node) *inode.Node {
+	rightNode, err := tree.getRightNode(node)
 	if err != nil {
 		panic(err)
 	}
@@ -25,7 +25,7 @@ func (t *Tree) ensureRightNode(node *inode.Node) *inode.Node {
 	return rightNode
 }
 
-func (t *Tree) getLeftNode(node *inode.Node) (*inode.Node, error) {
+func (tree *Tree) getLeftNode(node *inode.Node) (*inode.Node, error) {
 	node.CheckValid()
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no left node")
@@ -34,7 +34,7 @@ func (t *Tree) getLeftNode(node *inode.Node) (*inode.Node, error) {
 		return node.LeftNode(), nil
 	}
 
-	leftNode, err := t.db.GetLeftNode(node)
+	leftNode, err := tree.db.GetLeftNode(node)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (t *Tree) getLeftNode(node *inode.Node) (*inode.Node, error) {
 	return node.LeftNode(), nil
 }
 
-func (t *Tree) getRightNode(node *inode.Node) (*inode.Node, error) {
+func (tree *Tree) getRightNode(node *inode.Node) (*inode.Node, error) {
 	node.CheckValid()
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no right node")
@@ -53,7 +53,7 @@ func (t *Tree) getRightNode(node *inode.Node) (*inode.Node, error) {
 		return node.RightNode(), nil
 	}
 
-	rightNode, err := t.db.GetRightNode(node)
+	rightNode, err := tree.db.GetRightNode(node)
 	if err != nil {
 		return nil, err
 	}

@@ -40,14 +40,14 @@ func Test_TreeHash(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	require.NoError(t, err)
-	opts := testutil.BigTreeOptions_100_000()
+	opts := testutil.BigOptions_100_000()
 
 	// this hash was validated as correct (with this same dataset) in iavl-bench
 	// with `go run . tree --seed 1234 --dataset std`
 	// at this commit tree: https://github.com/cosmos/iavl-bench/blob/3a6a1ec0a8cbec305e46239454113687da18240d/iavl-v0/main.go#L136
 	opts.Until = 100
 	opts.UntilHash = "0101e1d6f3158dcb7221acd7ed36ce19f2ef26847ffea7ce69232e362539e5cf"
-	treeOpts := itree.TreeOptions{
+	treeOpts := itree.Options{
 		HeightFilter: 1, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
 	}
 
@@ -80,7 +80,7 @@ func Test_TreeSanity(t *testing.T) {
 				sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: dbPath})
 				// sql, err := NewInMemorySqliteDb(pool)
 				require.NoError(t, err)
-				return itree.NewTree(sql, pool, itree.DefaultTreeOptions())
+				return itree.NewTree(sql, pool, itree.DefaultOptions())
 			},
 			hashFn: func(tree *itree.Tree) []byte {
 				hash, _, err := tree.SaveVersion()
@@ -92,7 +92,7 @@ func Test_TreeSanity(t *testing.T) {
 			name: "no db",
 			treeFn: func() *itree.Tree {
 				pool := nodepool.NewNodePool()
-				return itree.NewTree(nil, pool, itree.DefaultTreeOptions())
+				return itree.NewTree(nil, pool, itree.DefaultOptions())
 			},
 			hashFn: func(tree *itree.Tree) []byte {
 				rehashTree(tree.Root())
@@ -147,7 +147,7 @@ func Test_EmptyTree(t *testing.T) {
 	dbPath := t.TempDir()
 	sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: dbPath})
 	require.NoError(t, err)
-	tree := itree.NewTree(sql, pool, itree.DefaultTreeOptions())
+	tree := itree.NewTree(sql, pool, itree.DefaultOptions())
 
 	_, err = tree.Set([]byte("foo"), []byte("bar"))
 	require.NoError(t, err)
@@ -198,7 +198,7 @@ func Test_Replay(t *testing.T) {
 	tmpDir := t.TempDir()
 	sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: tmpDir})
 	require.NoError(t, err)
-	opts := itree.DefaultTreeOptions()
+	opts := itree.DefaultOptions()
 	tree := itree.NewTree(sql, pool, opts)
 
 	// we must buffer all sets/deletes and order them first for replay to work properly.
@@ -297,7 +297,7 @@ func Test_PruneLogic(t *testing.T) {
 	tmpDir := t.TempDir()
 	sql, err := sqlite.NewSqliteDb(pool, sqlite.SqliteDbOptions{Path: tmpDir, ShardTrees: false, Logger: logger.NewDebugLogger()})
 	require.NoError(t, err)
-	treeOpts := itree.DefaultTreeOptions()
+	treeOpts := itree.DefaultOptions()
 	tree := itree.NewTree(sql, pool, treeOpts)
 
 	for ; itr.Valid(); err = itr.Next() {
@@ -333,7 +333,7 @@ func Test_PruneLogic(t *testing.T) {
 // func Tesitree_Build_Load(t *testing.T) {
 // 	tmpDir := t.TempDir()
 // 	opts := testutil.NewTreeBuildOptions().With10_000()
-// 	multiTree := NewMultiTree(NewTestLogger(), tmpDir, TreeOptions{
+// 	multiTree := NewMultiTree(NewTestLogger(), tmpDir, Options{
 // 		HeightFilter: 0, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
 // 	})
 // 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)

@@ -130,7 +130,7 @@ package gen
 // 		Use:   "tree",
 // 		Short: "build and save a Tree to disk, taking generated changesets as input",
 // 		RunE: func(_ *cobra.Command, _ []string) error {
-// 			multiTree := iavl.NewMultiTree(iavl.NewDebugLogger(), dbPath, iavl.DefaultTreeOptions())
+// 			multiTree := iavl.NewMultiTree(iavl.NewDebugLogger(), dbPath, iavl.DefaultOptions())
 // 			defer func(mt *iavl.MultiTree) {
 // 				err := mt.Close()
 // 				if err != nil {

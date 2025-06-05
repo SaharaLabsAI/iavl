@@ -6,10 +6,10 @@ package tests
 // 	tmpDir := t.TempDir()
 // 	t.Logf("tmpDir: %s", tmpDir)
 // 	require.NoError(t, err)
-// 	opts := testutil.BigTreeOptions_100_000()
+// 	opts := testutil.BigOptions_100_000()
 // 	opts.Until = 20
 // 	opts.UntilHash = "0d4dfc4b6f6194f72da11fa254cf2910e54d330e8a4d6238af40e6b8d35ea77f"
-// 	treeOpts := TreeOptions{HeightFilter: 1, StateStorage: true, EvictionDepth: 14}
+// 	treeOpts := Options{HeightFilter: 1, StateStorage: true, EvictionDepth: 14}
 //
 // 	multiTree := NewMultiTree(NewDebugLogger(), tmpDir, treeOpts)
 // 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)

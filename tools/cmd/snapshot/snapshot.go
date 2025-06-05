@@ -30,7 +30,7 @@ package snapshot
 // 				if err != nil {
 // 					return err
 // 				}
-// 				tree := iavl.NewTree(sql, pool, iavl.TreeOptions{})
+// 				tree := iavl.NewTree(sql, pool, iavl.Options{})
 // 				if err = tree.LoadVersion(version); err != nil {
 // 					return err
 // 				}

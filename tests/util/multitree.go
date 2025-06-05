@@ -29,13 +29,13 @@ type MultiTree struct {
 
 	pool     *nodepool.NodePool
 	rootPath string
-	treeOpts itree.TreeOptions
+	treeOpts itree.Options
 
 	doneCh  chan saveVersionResult
 	errorCh chan error
 }
 
-func NewMultiTree(logger logger.Logger, rootPath string, opts itree.TreeOptions) *MultiTree {
+func NewMultiTree(logger logger.Logger, rootPath string, opts itree.Options) *MultiTree {
 	if opts.MetricsProxy == nil {
 		opts.MetricsProxy = metrics.NilMetrics{}
 	}
@@ -50,7 +50,7 @@ func NewMultiTree(logger logger.Logger, rootPath string, opts itree.TreeOptions)
 	}
 }
 
-// func ImportMultiTree(logger logger.Logger, version int64, path string, treeOpts itree.TreeOptions) (*MultiTree, error) {
+// func ImportMultiTree(logger logger.Logger, version int64, path string, treeOpts itree.Options) (*MultiTree, error) {
 // 	mt := NewMultiTree(logger, path, treeOpts)
 // 	paths, err := comutil.FindDbsInPath(path)
 // 	if err != nil {

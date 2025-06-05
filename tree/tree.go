@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/metrics"
@@ -44,23 +45,7 @@ type Tree struct {
 	rw sync.RWMutex
 }
 
-type TreeOptions struct {
-	StateStorage  bool
-	HeightFilter  int8
-	EvictionDepth int8
-	MetricsProxy  metrics.Proxy
-}
-
-func DefaultTreeOptions() TreeOptions {
-	return TreeOptions{
-		StateStorage:  true,
-		HeightFilter:  1,
-		EvictionDepth: 18,
-		MetricsProxy:  &metrics.NilMetrics{},
-	}
-}
-
-func NewTree(db ndb.DB, pool *nodepool.NodePool, opts TreeOptions) *Tree {
+func NewTree(db ndb.DB, pool *nodepool.NodePool, opts Options) *Tree {
 	tree := &Tree{
 		db:             db,
 		dirtyNodes:     &ndb.DirtyNodes{},
@@ -175,11 +160,6 @@ func (tree *Tree) WorkingHash() []byte {
 	return hash
 }
 
-// NOTE: This func is primary for unit test(no db, pure memory tree)
-func (tree *Tree) AdvanceVersion() {
-	tree.version.Add(1)
-}
-
 func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	tree.rw.Lock()
 	defer tree.rw.Unlock()
@@ -231,6 +211,76 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	tree.modificationCount = 0
 
 	return rootHash, savedTreeVersion, nil
+}
+
+// Set sets a key in the working tree. Nil values are invalid. The given
+// key/value byte slices must not be modified after this call, since they point
+// to slices stored within IAVL. It returns true when an existing value was
+// updated, while false means it was a new key.
+func (tree *Tree) Set(key, value []byte) (updated bool, err error) {
+	if tree.immutable {
+		panic("set on immutable tree")
+	}
+
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_set")
+	}
+
+	tree.rw.Lock()
+	defer tree.rw.Unlock()
+
+	updated, err = tree.set(key, value)
+	if err != nil {
+		return false, err
+	}
+	if updated {
+		tree.metrics.IncrCounter(1, constants.MetricsNamespace, "tree_update")
+	} else {
+		tree.metrics.IncrCounter(1, constants.MetricsNamespace, "tree_new_node")
+	}
+
+	tree.modificationCount++
+	tree.cache[string(key)] = value
+	delete(tree.deleted, string(key))
+
+	return updated, nil
+}
+
+// Remove removes a key from the working tree. The given key byte slice should not be modified
+// after this call, since it may point to data stored inside IAVL.
+func (tree *Tree) Remove(key []byte) ([]byte, bool, error) {
+	if tree.immutable {
+		panic("Remove on immutable tree")
+	}
+
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_remove")
+	}
+
+	tree.rw.Lock()
+	defer tree.rw.Unlock()
+
+	if tree.root == nil {
+		return nil, false, nil
+	}
+
+	delete(tree.cache, string(key))
+
+	newRoot, _, value, removed, err := tree.iterativeRemove(tree.root, key)
+	if err != nil {
+		return nil, false, err
+	}
+	if !removed {
+		return nil, false, nil
+	}
+
+	tree.deleted[string(key)] = true
+	tree.modificationCount++
+
+	tree.metrics.IncrCounter(1, constants.MetricsNamespace, "tree_delete")
+
+	tree.root = newRoot
+	return value, true, nil
 }
 
 func (tree *Tree) Metrics() metrics.Proxy {
@@ -490,58 +540,4 @@ func (tree *Tree) nextVersion() int64 {
 func (tree *Tree) replayChangelog(toVersion int64, targetHash []byte) error {
 	// return tree.sql.replayChangelog(tree, toVersion, targetHash)
 	return nil
-}
-
-// markHashDirty marks the tree's hash as needing recalculation
-// Call this function whenever the tree structure changes
-func (tree *Tree) markHashDirty() {
-	tree.hashedVersion = -1 // Invalidate hash by setting to impossible version
-}
-
-func (tree *Tree) resetSequences() {
-	tree.leafSequence = constants.LeafSequenceStart
-	tree.branchSequence = 0
-}
-
-func (tree *Tree) addOrphan(node *inode.Node) {
-	if node.Hash() == nil {
-		return
-	}
-
-	tree.dirtyNodes.AddOrphan(node)
-}
-
-func (tree *Tree) addDelete(node *inode.Node) {
-	// added and removed in the same version; no op.
-	if node.Version() == tree.nextVersion() {
-		return
-	}
-
-	tree.dirtyNodes.AddDelete(tree.nextLeafNodeKey(), node.Key())
-}
-
-func (tree *Tree) returnNode(node *inode.Node) {
-	if node == nil {
-		return
-	}
-
-	node.CheckValid()
-
-	// Make sure node is not the tree's root before recycling
-	if node == tree.root {
-		return
-	}
-
-	// Check for lingering references before returning to pool
-	if node.LeftNode() != nil || node.RightNode() != nil {
-		panic("Attempted to return node with active child references")
-	}
-
-	if node.Dirty() {
-		tree.workingBytes -= node.SizeBytes()
-		tree.workingSize--
-	}
-
-	// Return node to the pool for reuse
-	tree.nodePool.Put(node)
 }

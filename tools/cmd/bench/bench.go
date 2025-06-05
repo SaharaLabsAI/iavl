@@ -43,7 +43,7 @@ package bench
 // 					f.Close()
 // 				}()
 // 			}
-// 			treeOpts := iavl.DefaultTreeOptions()
+// 			treeOpts := iavl.DefaultOptions()
 // 			treeOpts.StateStorage = true
 // 			treeOpts.HeightFilter = 1
 // 			treeOpts.EvictionDepth = 32

@@ -23,7 +23,7 @@ func (tree *Tree) Has(key []byte) (bool, error) {
 
 func (tree *Tree) Get(key []byte) ([]byte, error) {
 	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_db_get")
 	}
 
 	tree.rw.RLock()
@@ -41,7 +41,11 @@ func (tree *Tree) Get(key []byte) ([]byte, error) {
 	return tree.db.GetVersioned(key, treeVersion)
 }
 
-func (t *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
+func (tree *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
+	if tree.metricsProxy != nil {
+		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
+	}
+
 	if node.IsLeaf() {
 		switch bytes.Compare(node.Key(), key) {
 		case -1:
@@ -54,20 +58,20 @@ func (t *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err
 	}
 
 	if bytes.Compare(key, node.Key()) < 0 {
-		leftNode, err := t.getLeftNode(node)
+		leftNode, err := tree.getLeftNode(node)
 		if err != nil {
 			return 0, nil, err
 		}
 
-		return t.get(leftNode, key)
+		return tree.get(leftNode, key)
 	}
 
-	rightNode, err := t.getRightNode(node)
+	rightNode, err := tree.getRightNode(node)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	index, value, err = t.get(rightNode, key)
+	index, value, err = tree.get(rightNode, key)
 	if err != nil {
 		return 0, nil, err
 	}

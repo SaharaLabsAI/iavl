@@ -5,7 +5,7 @@ package tests
 // 	sql, err := iavl.NewInMemorySqliteDb(pool)
 // 	require.NoError(t, err)
 //
-// 	opts := iavl.DefaultTreeOptions()
+// 	opts := iavl.DefaultOptions()
 // 	tree := iavl.NewTree(sql, pool, opts)
 // 	set := func(key string, value string) {
 // 		_, err := tree.Set([]byte(key), []byte(value))
@@ -219,7 +219,7 @@ package tests
 // 	sql, err := iavl.NewSqliteDb(pool, iavl.SqliteDbOptions{Path: tmpDir})
 // 	require.NoError(t, err)
 //
-// 	opts := iavl.DefaultTreeOptions()
+// 	opts := iavl.DefaultOptions()
 // 	tree := iavl.NewTree(sql, pool, opts)
 // 	set := func(key string, value string) {
 // 		_, err := tree.Set([]byte(key), []byte(value))

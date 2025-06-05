@@ -45,38 +45,39 @@ func (t *Tree) balance(node *inode.Node) (newSelf *inode.Node, err error) {
 		if leftLeftNode.SubTreeHeight() >= leftNode.SubTreeHeight()-1 {
 			// Left-Left case: single right rotation (leftLeftNode height is sufficient)
 			return t.rotateRight(node)
-		} else {
-			// Left-Right case: left rotation on left child, then right rotation on node
-			newLeftNode, err := t.rotateLeft(leftNode)
-			if err != nil {
-				return nil, err
-			}
-			node.SetLeft(newLeftNode)
-
-			return t.rotateRight(node)
 		}
-	} else { // balance < -1, right heavy subtree
-		// Only fetch right child's nodes if we need to determine rotation type
-		rightRightNode, err := t.getRightNode(rightNode)
+
+		// Left-Right case: left rotation on left child, then right rotation on node
+		newLeftNode, err := t.rotateLeft(leftNode)
 		if err != nil {
 			return nil, err
 		}
+		node.SetLeft(newLeftNode)
 
-		// Check if we need a double rotation by looking at right-right height
-		if rightRightNode.SubTreeHeight() >= rightNode.SubTreeHeight()-1 {
-			// Right-Right case: single left rotation (rightRightNode height is sufficient)
-			return t.rotateLeft(node)
-		} else {
-			// Right-Left case: right rotation on right child, then left rotation on node
-			newRightNode, err := t.rotateRight(rightNode)
-			if err != nil {
-				return nil, err
-			}
-			node.SetRight(newRightNode)
-
-			return t.rotateLeft(node)
-		}
+		return t.rotateRight(node)
 	}
+
+	// balance < -1, right heavy subtree
+	// Only fetch right child's nodes if we need to determine rotation type
+	rightRightNode, err := t.getRightNode(rightNode)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if we need a double rotation by looking at right-right height
+	if rightRightNode.SubTreeHeight() >= rightNode.SubTreeHeight()-1 {
+		// Right-Right case: single left rotation (rightRightNode height is sufficient)
+		return t.rotateLeft(node)
+	}
+
+	// Right-Left case: right rotation on right child, then left rotation on node
+	newRightNode, err := t.rotateRight(rightNode)
+	if err != nil {
+		return nil, err
+	}
+	node.SetRight(newRightNode)
+
+	return t.rotateLeft(node)
 }
 
 // NOTE: mutates height and size

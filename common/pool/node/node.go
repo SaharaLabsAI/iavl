@@ -37,6 +37,10 @@ func NewNodePool() *NodePool {
 	return np
 }
 
+func (np *NodePool) PoolID() uint64 {
+	return np.poolID.Load()
+}
+
 func (np *NodePool) Get() *inode.Node {
 	n := np.syncPool.Get().(*inode.Node)
 	n.SetPoolID(np.poolID.Load())

@@ -58,6 +58,33 @@ func (node *Node) ShadowCopy(nodepool NodePool) *Node {
 	return n
 }
 
+func (node *Node) DeepCopy(nodepool NodePool) *Node {
+	n := &Node{source: ManualNode}
+	if nodepool != nil {
+		n = nodepool.Get()
+		n.source = PoolNode
+	}
+
+	key := make([]byte, len(node.key))
+	copy(key, node.key)
+
+	value := make([]byte, len(node.value))
+	copy(value, node.value)
+
+	n.subtreeHeight = node.subtreeHeight
+	n.nodeKey = node.nodeKey
+	n.size = node.size
+	n.key = key
+	n.hash = node.hash
+	n.value = value
+	n.leftNodeKey = node.leftNodeKey
+	n.rightNodeKey = node.rightNodeKey
+	n.leftNode = node.leftNode
+	n.rightNode = node.rightNode
+
+	return n
+}
+
 func (node *Node) NodeKey() NodeKey {
 	node.CheckValid()
 	return node.nodeKey

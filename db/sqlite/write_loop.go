@@ -13,11 +13,11 @@ import (
 	"github.com/eatonphil/gosqlite"
 	"golang.org/x/sys/unix"
 
-	"github.com/cosmos/iavl/v2/constants"
+	"github.com/cosmos/iavl/v2/common/constants"
+	"github.com/cosmos/iavl/v2/common/logger"
+	"github.com/cosmos/iavl/v2/common/metrics"
 	"github.com/cosmos/iavl/v2/db"
-	"github.com/cosmos/iavl/v2/logger"
-	"github.com/cosmos/iavl/v2/metrics"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 const pruneBatchSize = 2000
@@ -28,7 +28,7 @@ type pruneSignal struct {
 
 type saveSignal struct {
 	batch   *WriteBatch
-	root    *nodetypes.Node
+	root    *inode.Node
 	version int64
 }
 
@@ -80,7 +80,7 @@ func NewWriteEventLoop(sql *WriteDB, logger logger.Logger, metrics metrics.Proxy
 	return writer, cancel
 }
 
-func (w *WriteEventLoop) SaveTree(root *nodetypes.Node, version int64, updates *db.DirtyNodes) error {
+func (w *WriteEventLoop) SaveTree(root *inode.Node, version int64, updates *db.DirtyNodes) error {
 	defer w.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "db_write")
 
 	batch := &WriteBatch{

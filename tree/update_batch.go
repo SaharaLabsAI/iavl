@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cosmos/iavl/v2/constants"
+	"github.com/cosmos/iavl/v2/common/constants"
 )
 
 type BatchOperationType int

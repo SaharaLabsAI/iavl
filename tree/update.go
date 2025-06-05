@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cosmos/iavl/v2/constants"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	"github.com/cosmos/iavl/v2/common/constants"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 // Set sets a key in the working tree. Nil values are invalid. The given
@@ -94,12 +94,12 @@ func (tree *Tree) set(key []byte, value []byte) (updated bool, err error) {
 	return updated, err
 }
 
-func (tree *Tree) iterativeSet(node *nodetypes.Node, key []byte, value []byte) (
-	newSelf *nodetypes.Node, updated bool, err error,
+func (tree *Tree) iterativeSet(node *inode.Node, key []byte, value []byte) (
+	newSelf *inode.Node, updated bool, err error,
 ) {
 	// Define a struct to track our traversal state
 	type setFrame struct {
-		node    *nodetypes.Node
+		node    *inode.Node
 		key     []byte
 		value   []byte
 		goLeft  bool // Whether we should go left or right from this node
@@ -117,8 +117,8 @@ func (tree *Tree) iterativeSet(node *nodetypes.Node, key []byte, value []byte) (
 	})
 
 	// Process frames in a loop until stack is empty
-	var currentNode *nodetypes.Node
-	childMap := make(map[*nodetypes.Node]*nodetypes.Node) // Maps parent nodes to their processed children
+	var currentNode *inode.Node
+	childMap := make(map[*inode.Node]*inode.Node) // Maps parent nodes to their processed children
 
 	for len(stack) > 0 {
 		// Get current frame from the top of stack
@@ -215,7 +215,7 @@ func (tree *Tree) iterativeSet(node *nodetypes.Node, key []byte, value []byte) (
 				tree.mutateNode(currentNode)
 
 				// Add frame for child node traversal
-				var childNode *nodetypes.Node
+				var childNode *inode.Node
 				if currentFrame.goLeft {
 					childNode = tree.ensureLeftNode(currentNode)
 				} else {
@@ -293,10 +293,10 @@ func (tree *Tree) iterativeSet(node *nodetypes.Node, key []byte, value []byte) (
 // - the node that replaces the orig. node after remove
 // - new leftmost leaf key for tree after successfully removing 'key' if changed.
 // - the removed value
-func (tree *Tree) iterativeRemove(node *nodetypes.Node, key []byte) (newSelf *nodetypes.Node, newKey []byte, newValue []byte, removed bool, err error) {
+func (tree *Tree) iterativeRemove(node *inode.Node, key []byte) (newSelf *inode.Node, newKey []byte, newValue []byte, removed bool, err error) {
 	// Define a struct to track our traversal state
 	type removeFrame struct {
-		node    *nodetypes.Node
+		node    *inode.Node
 		key     []byte
 		visited bool // Whether this node's children have been processed
 		goLeft  bool // Whether we go left or right from this node
@@ -313,15 +313,15 @@ func (tree *Tree) iterativeRemove(node *nodetypes.Node, key []byte) (newSelf *no
 
 	// Maps parent nodes to their processed children and results
 	type resultInfo struct {
-		node       *nodetypes.Node // The new node replacing the old one
-		newKey     []byte          // New key (if any)
-		value      []byte          // Value removed (if any)
-		wasRemoved bool            // Whether a removal occurred in this subtree
+		node       *inode.Node // The new node replacing the old one
+		newKey     []byte      // New key (if any)
+		value      []byte      // Value removed (if any)
+		wasRemoved bool        // Whether a removal occurred in this subtree
 	}
-	resultMap := make(map[*nodetypes.Node]resultInfo)
+	resultMap := make(map[*inode.Node]resultInfo)
 
 	// Track nodes that should be returned to the pool after the operation
-	nodesToReturn := make(map[*nodetypes.Node]bool)
+	nodesToReturn := make(map[*inode.Node]bool)
 
 	// Process frames until the stack is empty
 	for len(stack) > 0 {
@@ -381,7 +381,7 @@ func (tree *Tree) iterativeRemove(node *nodetypes.Node, key []byte) (newSelf *no
 			stack[currentIndex] = *currentFrame
 
 			// Visit the appropriate child node based on key comparison
-			var childNode *nodetypes.Node
+			var childNode *inode.Node
 			if currentFrame.goLeft {
 				childNode = tree.ensureLeftNode(currentNode)
 			} else {
@@ -427,7 +427,7 @@ func (tree *Tree) iterativeRemove(node *nodetypes.Node, key []byte) (newSelf *no
 			// We need to update the current node based on the removal result
 			tree.addOrphan(currentNode)
 
-			var resultNode *nodetypes.Node
+			var resultNode *inode.Node
 			var resultKey []byte
 
 			if currentFrame.goLeft {
@@ -525,7 +525,7 @@ func (tree *Tree) iterativeRemove(node *nodetypes.Node, key []byte) (newSelf *no
 	return nil, nil, nil, false, fmt.Errorf("unexpected exit from iterativeRemove")
 }
 
-func (tree *Tree) mutateNode(node *nodetypes.Node) {
+func (tree *Tree) mutateNode(node *inode.Node) {
 	// this seems to be true only in certain cases
 	// we should investigate if we can remove this check
 	alreadyMutatedForNextVersion := node.Hash() == nil && node.Version() == tree.version.Load()+1

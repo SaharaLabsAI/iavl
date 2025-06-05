@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/cosmos/iavl/v2/db/sqlite"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 // maxBatchSize is the maximum size of the import batch before flushing it to the database
@@ -26,7 +26,7 @@ type Importer struct {
 	batchSize uint32
 	batch     *sqlite.WriteBatch
 
-	stack         []*nodetypes.Node
+	stack         []*inode.Node
 	leafSequences []uint32
 	nodeSequences []uint32
 
@@ -34,8 +34,8 @@ type Importer struct {
 	inflightCommit <-chan error
 }
 
-func NewImportNode(key, value []byte, version int64, height int8) *nodetypes.Node {
-	return nodetypes.NewNode(key, value, version, height)
+func NewImportNode(key, value []byte, version int64, height int8) *inode.Node {
+	return inode.NewNode(key, value, version, height)
 }
 
 // newImporter creates a new Importer for an empty Tree

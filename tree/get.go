@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/cosmos/iavl/v2/constants"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	"github.com/cosmos/iavl/v2/common/constants"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 func (tree *Tree) Has(key []byte) (bool, error) {
@@ -41,7 +41,7 @@ func (tree *Tree) Get(key []byte) ([]byte, error) {
 	return tree.db.GetVersioned(key, treeVersion)
 }
 
-func (t *Tree) get(node *nodetypes.Node, key []byte) (index int64, value []byte, err error) {
+func (t *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
 	if node.IsLeaf() {
 		switch bytes.Compare(node.Key(), key) {
 		case -1:

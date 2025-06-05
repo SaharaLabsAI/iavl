@@ -4,17 +4,17 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cosmos/iavl/v2/constants"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	"github.com/cosmos/iavl/v2/common/constants"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
-func (sql *SqliteDb) GetRightNode(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (sql *SqliteDb) GetRightNode(node *inode.Node) (*inode.Node, error) {
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no children")
 	}
 
 	var (
-		rightNode *nodetypes.Node
+		rightNode *inode.Node
 		err       error
 	)
 
@@ -31,13 +31,13 @@ func (sql *SqliteDb) GetRightNode(node *nodetypes.Node) (*nodetypes.Node, error)
 	return rightNode, nil
 }
 
-func (sql *SqliteDb) GetLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (sql *SqliteDb) GetLeftNode(node *inode.Node) (*inode.Node, error) {
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no children")
 	}
 
 	var (
-		leftNode *nodetypes.Node
+		leftNode *inode.Node
 		err      error
 	)
 

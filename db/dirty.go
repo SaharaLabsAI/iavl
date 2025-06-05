@@ -1,32 +1,32 @@
 package db
 
-import "github.com/cosmos/iavl/v2/types/node"
+import inode "github.com/cosmos/iavl/v2/node"
 
 type DeletedNode struct {
 	// the sequence in which this deletion was processed
-	DeleteKey node.NodeKey
+	DeleteKey inode.NodeKey
 	// the leaf key to delete in `latest` table (if maintained)
 	LeafKey []byte
 }
 
 type DirtyNodes struct {
 	Version       int64
-	Leaves        []*node.Node
-	LeafOrphans   []node.NodeKey
-	Branches      []*node.Node
-	BranchOrphans []node.NodeKey
+	Leaves        []*inode.Node
+	LeafOrphans   []inode.NodeKey
+	Branches      []*inode.Node
+	BranchOrphans []inode.NodeKey
 	Deletes       []*DeletedNode
 }
 
-func (n *DirtyNodes) AddBranch(node *node.Node) {
+func (n *DirtyNodes) AddBranch(node *inode.Node) {
 	n.Branches = append(n.Branches, node)
 }
 
-func (n *DirtyNodes) AddLeaf(node *node.Node) {
+func (n *DirtyNodes) AddLeaf(node *inode.Node) {
 	n.Leaves = append(n.Leaves, node)
 }
 
-func (n *DirtyNodes) AddOrphan(node *node.Node) {
+func (n *DirtyNodes) AddOrphan(node *inode.Node) {
 	if !node.IsLeaf() {
 		n.BranchOrphans = append(n.BranchOrphans, node.NodeKey())
 	} else if node.IsLeaf() && !node.Dirty() {
@@ -34,7 +34,7 @@ func (n *DirtyNodes) AddOrphan(node *node.Node) {
 	}
 }
 
-func (n *DirtyNodes) AddDelete(nodeKey node.NodeKey, leafKey []byte) {
+func (n *DirtyNodes) AddDelete(nodeKey inode.NodeKey, leafKey []byte) {
 	del := &DeletedNode{
 		DeleteKey: nodeKey,
 		LeafKey:   leafKey,

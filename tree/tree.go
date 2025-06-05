@@ -6,16 +6,16 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cosmos/iavl/v2/constants"
+	"github.com/cosmos/iavl/v2/common/constants"
+	"github.com/cosmos/iavl/v2/common/metrics"
+	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	ndb "github.com/cosmos/iavl/v2/db"
-	"github.com/cosmos/iavl/v2/metrics"
-	nodepool "github.com/cosmos/iavl/v2/pool/node"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 type Tree struct {
 	version atomic.Int64
-	root    *nodetypes.Node
+	root    *inode.Node
 
 	metrics  metrics.Proxy
 	nodePool *nodepool.NodePool
@@ -93,6 +93,13 @@ func (tree *Tree) VersionExists(version int64) (bool, error) {
 	return exists, nil
 }
 
+func (tree *Tree) Root() *inode.Node {
+	tree.rw.Lock()
+	defer tree.rw.RUnlock()
+
+	return tree.root.ShadowCopy(nil)
+}
+
 func (tree *Tree) Version() int64 {
 	return tree.version.Load()
 }
@@ -142,7 +149,7 @@ func (tree *Tree) Hash() []byte {
 	defer tree.rw.RUnlock()
 
 	if tree.root == nil {
-		return nodetypes.EmptyHash
+		return inode.EmptyHash
 	}
 	return tree.root.Hash()
 }
@@ -152,7 +159,7 @@ func (tree *Tree) WorkingHash() []byte {
 	defer tree.rw.Unlock()
 
 	if tree.root == nil {
-		return nodetypes.EmptyHash
+		return inode.EmptyHash
 	}
 
 	if tree.root.Hash() != nil {
@@ -280,7 +287,7 @@ func (tree *Tree) GetByIndex(index int64) (key []byte, value []byte, err error) 
 	return tree.getByIndex(tree.root, index)
 }
 
-func (tree *Tree) getByIndex(node *nodetypes.Node, index int64) (key []byte, value []byte, err error) {
+func (tree *Tree) getByIndex(node *inode.Node, index int64) (key []byte, value []byte, err error) {
 	if node.IsLeaf() {
 		if index == 0 {
 			return node.Key(), node.Value(), nil
@@ -333,7 +340,7 @@ func (tree *Tree) GetRecent(version int64, key []byte) (bool, []byte, error) {
 	return true, val, err
 }
 
-func (tree *Tree) getRecentRoot(version int64) (bool, *nodetypes.Node) {
+func (tree *Tree) getRecentRoot(version int64) (bool, *inode.Node) {
 	tree.rw.RLock()
 	defer tree.rw.RUnlock()
 
@@ -480,7 +487,7 @@ func (tree *Tree) resetSequences() {
 	tree.branchSequence = 0
 }
 
-func (tree *Tree) addOrphan(node *nodetypes.Node) {
+func (tree *Tree) addOrphan(node *inode.Node) {
 	if node.Hash() == nil {
 		return
 	}
@@ -488,7 +495,7 @@ func (tree *Tree) addOrphan(node *nodetypes.Node) {
 	tree.dirtyNodes.AddOrphan(node)
 }
 
-func (tree *Tree) addDelete(node *nodetypes.Node) {
+func (tree *Tree) addDelete(node *inode.Node) {
 	// added and removed in the same version; no op.
 	if node.Version() == tree.nextVersion() {
 		return
@@ -497,7 +504,7 @@ func (tree *Tree) addDelete(node *nodetypes.Node) {
 	tree.dirtyNodes.AddDelete(tree.nextLeafNodeKey(), node.Key())
 }
 
-func (tree *Tree) returnNode(node *nodetypes.Node) {
+func (tree *Tree) returnNode(node *inode.Node) {
 	if node == nil {
 		return
 	}

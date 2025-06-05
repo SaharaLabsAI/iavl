@@ -8,7 +8,7 @@ import (
 	"io"
 	"math"
 
-	encoding "github.com/cosmos/iavl/v2/internal"
+	"github.com/cosmos/iavl/v2/common/encoding"
 )
 
 type NodePool interface {

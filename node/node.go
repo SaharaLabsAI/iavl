@@ -46,6 +46,18 @@ func NewNode(key, value []byte, version int64, height int8) *Node {
 	}
 }
 
+func (node *Node) ShadowCopy(nodepool NodePool) *Node {
+	n := &Node{source: ManualNode}
+	if nodepool != nil {
+		n = nodepool.Get()
+		n.source = PoolNode
+	}
+
+	*n = *node // Shadow copy
+
+	return n
+}
+
 func (node *Node) NodeKey() NodeKey {
 	node.CheckValid()
 	return node.nodeKey

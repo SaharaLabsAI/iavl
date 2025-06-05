@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 // NOTE: assumes that node can be modified
 // TODO: optimize balance & rotate
-func (t *Tree) balance(node *nodetypes.Node) (newSelf *nodetypes.Node, err error) {
+func (t *Tree) balance(node *inode.Node) (newSelf *inode.Node, err error) {
 	if node.Hash() != nil {
 		return nil, errors.New("unexpected balance() call on persisted node")
 	}
@@ -80,7 +80,7 @@ func (t *Tree) balance(node *nodetypes.Node) (newSelf *nodetypes.Node, err error
 }
 
 // NOTE: mutates height and size
-func (t *Tree) calcHeightAndSize(node *nodetypes.Node) error {
+func (t *Tree) calcHeightAndSize(node *inode.Node) error {
 	leftNode, err := t.getLeftNode(node)
 	if err != nil {
 		return err
@@ -102,7 +102,7 @@ func (t *Tree) calcHeightAndSize(node *nodetypes.Node) error {
 }
 
 // Rotate right and return the new node and orphan.
-func (t *Tree) rotateRight(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (t *Tree) rotateRight(node *inode.Node) (*inode.Node, error) {
 	var err error
 
 	// Early validation to prevent operations on nil nodes
@@ -158,7 +158,7 @@ func (t *Tree) rotateRight(node *nodetypes.Node) (*nodetypes.Node, error) {
 }
 
 // Rotate left and return the new node and orphan.
-func (t *Tree) rotateLeft(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (t *Tree) rotateLeft(node *inode.Node) (*inode.Node, error) {
 	var err error
 
 	// Early validation to prevent operations on nil nodes

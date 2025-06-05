@@ -1,7 +1,7 @@
 package tree
 
 import (
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 // TraverseOrderType is the type of the order in which the tree is traversed.
@@ -15,13 +15,13 @@ const (
 const maxOutChanSize = 8192
 
 type stackEntry struct {
-	node  *nodetypes.Node
+	node  *inode.Node
 	state int // 0: process left, 1: process right, 2: process self
 }
 
 // type Exporter struct {
 // 	tree    *Tree
-// 	out     chan *nodetypes.Node
+// 	out     chan *inode.Node
 // 	errCh   chan error
 // 	count   int
 // 	startAt time.Time
@@ -36,7 +36,7 @@ type stackEntry struct {
 //
 // 	exporter := &Exporter{
 // 		tree:    imTree,
-// 		out:     make(chan *nodetypes.Node, maxOutChanSize),
+// 		out:     make(chan *inode.Node, maxOutChanSize),
 // 		errCh:   make(chan error),
 // 		count:   0,
 // 		startAt: time.Now(),
@@ -58,7 +58,7 @@ type stackEntry struct {
 // 	return exporter
 // }
 //
-// func (e *Exporter) postOrderNext(root *nodetypes.Node) {
+// func (e *Exporter) postOrderNext(root *inode.Node) {
 // 	if root == nil {
 // 		return
 // 	}
@@ -121,12 +121,12 @@ type stackEntry struct {
 // 	}
 // }
 //
-// func (e *Exporter) preOrderNext(root *nodetypes.Node) {
+// func (e *Exporter) preOrderNext(root *inode.Node) {
 // 	if root == nil {
 // 		return
 // 	}
 //
-// 	stack := []*nodetypes.Node{root}
+// 	stack := []*inode.Node{root}
 //
 // 	for len(stack) > 0 {
 // 		n := len(stack) - 1
@@ -210,7 +210,7 @@ type stackEntry struct {
 // }
 //
 // // Primary used for unit tests
-// func (e *Exporter) NextRawNode() (*nodetypes.Node, error) {
+// func (e *Exporter) NextRawNode() (*inode.Node, error) {
 // 	select {
 // 	case node, ok := <-e.out:
 // 		if !ok {
@@ -262,7 +262,7 @@ type stackEntry struct {
 //
 // 	exporter := &Exporter{
 // 		tree:    imTree,
-// 		out:     make(chan *nodetypes.Node, maxOutChanSize),
+// 		out:     make(chan *inode.Node, maxOutChanSize),
 // 		errCh:   make(chan error),
 // 		count:   0,
 // 		version: version,

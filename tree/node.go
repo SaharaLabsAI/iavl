@@ -3,11 +3,11 @@ package tree
 import (
 	"errors"
 
-	"github.com/cosmos/iavl/v2/constants"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	"github.com/cosmos/iavl/v2/common/constants"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
-func (t *Tree) ensureLeftNode(node *nodetypes.Node) *nodetypes.Node {
+func (t *Tree) ensureLeftNode(node *inode.Node) *inode.Node {
 	leftNode, err := t.getLeftNode(node)
 	if err != nil {
 		panic(err)
@@ -16,7 +16,7 @@ func (t *Tree) ensureLeftNode(node *nodetypes.Node) *nodetypes.Node {
 	return leftNode
 }
 
-func (t *Tree) ensureRightNode(node *nodetypes.Node) *nodetypes.Node {
+func (t *Tree) ensureRightNode(node *inode.Node) *inode.Node {
 	rightNode, err := t.getRightNode(node)
 	if err != nil {
 		panic(err)
@@ -25,7 +25,7 @@ func (t *Tree) ensureRightNode(node *nodetypes.Node) *nodetypes.Node {
 	return rightNode
 }
 
-func (t *Tree) getLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (t *Tree) getLeftNode(node *inode.Node) (*inode.Node, error) {
 	node.CheckValid()
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no left node")
@@ -44,7 +44,7 @@ func (t *Tree) getLeftNode(node *nodetypes.Node) (*nodetypes.Node, error) {
 	return node.LeftNode(), nil
 }
 
-func (t *Tree) getRightNode(node *nodetypes.Node) (*nodetypes.Node, error) {
+func (t *Tree) getRightNode(node *inode.Node) (*inode.Node, error) {
 	node.CheckValid()
 	if node.IsLeaf() {
 		return nil, errors.New("leaf node has no right node")
@@ -64,7 +64,7 @@ func (t *Tree) getRightNode(node *nodetypes.Node) (*nodetypes.Node, error) {
 }
 
 // newLeafNode returns a new node from a key, value and version.
-func (tree *Tree) newLeafNode(key []byte, value []byte) *nodetypes.Node {
+func (tree *Tree) newLeafNode(key []byte, value []byte) *inode.Node {
 	node := tree.nodePool.Get()
 
 	node.SetNodeKey(tree.nextLeafNodeKey())
@@ -86,17 +86,17 @@ func (tree *Tree) newLeafNode(key []byte, value []byte) *nodetypes.Node {
 	return node
 }
 
-func (tree *Tree) nextNodeKey() nodetypes.NodeKey {
+func (tree *Tree) nextNodeKey() inode.NodeKey {
 	tree.branchSequence++
-	nk := nodetypes.NewNodeKey(tree.version.Load()+1, tree.branchSequence)
+	nk := inode.NewNodeKey(tree.version.Load()+1, tree.branchSequence)
 	return nk
 }
 
-func (tree *Tree) nextLeafNodeKey() nodetypes.NodeKey {
+func (tree *Tree) nextLeafNodeKey() inode.NodeKey {
 	tree.leafSequence++
 	if tree.leafSequence < constants.LeafSequenceStart {
 		panic("leaf sequence underflow")
 	}
-	nk := nodetypes.NewNodeKey(tree.version.Load()+1, tree.leafSequence)
+	nk := inode.NewNodeKey(tree.version.Load()+1, tree.leafSequence)
 	return nk
 }

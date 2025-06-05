@@ -35,7 +35,7 @@ package tree
 // )
 //
 // type iteratorStackEntry struct {
-// 	node  *nodetypes.Node
+// 	node  *inode.Node
 // 	state int // 0: process left, 1: process right, 2: process self
 // }
 //

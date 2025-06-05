@@ -6,13 +6,13 @@ import (
 	"runtime"
 	"sync"
 
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 type nodeLoadTask struct {
-	parentNode *nodetypes.Node
+	parentNode *inode.Node
 	isLeft     bool // true for left child, false for right child
-	nodeKey    nodetypes.NodeKey
+	nodeKey    inode.NodeKey
 }
 
 var loadTaskPool = &sync.Pool{
@@ -23,15 +23,15 @@ var loadTaskPool = &sync.Pool{
 
 var nodeSlicePool = &sync.Pool{
 	New: func() any {
-		return make([]*nodetypes.Node, 0, 1024)
+		return make([]*inode.Node, 0, 1024)
 	},
 }
 
 type CompactNodeBatch struct {
-	nodes     []*nodetypes.Node
+	nodes     []*inode.Node
 	parentIdx []int32
 	isLeft    []bool
-	nodeKeys  []nodetypes.NodeKey
+	nodeKeys  []inode.NodeKey
 }
 
 func (cnb *CompactNodeBatch) reset() {
@@ -41,7 +41,7 @@ func (cnb *CompactNodeBatch) reset() {
 	cnb.nodeKeys = cnb.nodeKeys[:0]
 }
 
-func (cnb *CompactNodeBatch) add(node *nodetypes.Node, parent int32, left bool, key nodetypes.NodeKey) {
+func (cnb *CompactNodeBatch) add(node *inode.Node, parent int32, left bool, key inode.NodeKey) {
 	cnb.nodes = append(cnb.nodes, node)
 	cnb.parentIdx = append(cnb.parentIdx, parent)
 	cnb.isLeft = append(cnb.isLeft, left)
@@ -51,10 +51,10 @@ func (cnb *CompactNodeBatch) add(node *nodetypes.Node, parent int32, left bool, 
 var compactBatchPool = &sync.Pool{
 	New: func() any {
 		return &CompactNodeBatch{
-			nodes:     make([]*nodetypes.Node, 0, 256),
+			nodes:     make([]*inode.Node, 0, 256),
 			parentIdx: make([]int32, 0, 256),
 			isLeft:    make([]bool, 0, 256),
-			nodeKeys:  make([]nodetypes.NodeKey, 0, 256),
+			nodeKeys:  make([]inode.NodeKey, 0, 256),
 		}
 	},
 }
@@ -84,7 +84,7 @@ func (tree *Tree) computeHash() []byte {
 	return tree.root.Hash()
 }
 
-// func (tree *Tree) deepHashParallel(node *nodetypes.Node, depth int8) {
+// func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 // 	if node == nil {
 // 		return
 // 	}
@@ -97,8 +97,8 @@ func (tree *Tree) computeHash() []byte {
 // 	}
 //
 // 	// Get pooled resources to reduce allocations
-// 	allBranches := nodeSlicePool.Get().([]*nodetypes.Node)
-// 	allLeaves := nodeSlicePool.Get().([]*nodetypes.Node)
+// 	allBranches := nodeSlicePool.Get().([]*inode.Node)
+// 	allLeaves := nodeSlicePool.Get().([]*inode.Node)
 // 	nodesToLoad := loadTaskPool.Get().([]nodeLoadTask)
 //
 // 	defer func() {
@@ -113,11 +113,11 @@ func (tree *Tree) computeHash() []byte {
 // 	}()
 //
 // 	// Initialize with estimated capacity
-// 	tree.dirtyNodes.Branches = make([]*nodetypes.Node, 0, estimatedNodes)
-// 	tree.dirtyNodes.Leaves = make([]*nodetypes.Node, 0, estimatedNodes/2)
+// 	tree.dirtyNodes.Branches = make([]*inode.Node, 0, estimatedNodes)
+// 	tree.dirtyNodes.Leaves = make([]*inode.Node, 0, estimatedNodes/2)
 //
 // 	type nodeWithDepth struct {
-// 		node  *nodetypes.Node
+// 		node  *inode.Node
 // 		depth int8
 // 	}
 //
@@ -225,7 +225,7 @@ func (tree *Tree) computeHash() []byte {
 //
 // 	// Phase 3: Continue tree traversal for newly loaded nodes
 // 	toProcess = []nodeWithDepth{{node: node, depth: depth}}
-// 	seen := make(map[*nodetypes.Node]bool, len(allBranches)+len(allLeaves))
+// 	seen := make(map[*inode.Node]bool, len(allBranches)+len(allLeaves))
 //
 // 	for len(toProcess) > 0 {
 // 		current := toProcess[0]
@@ -267,7 +267,7 @@ func (tree *Tree) computeHash() []byte {
 // 		leafWorkers = max(1, min(leafWorkers, 6)) // Cap at 6 workers, min 1
 //
 // 		if leafWorkers > 1 && len(allLeaves) > 2 { // Much lower threshold
-// 			leafChan := make(chan *nodetypes.Node, min(len(allLeaves), 50))
+// 			leafChan := make(chan *inode.Node, min(len(allLeaves), 50))
 //
 // 			go func() {
 // 				defer close(leafChan)
@@ -314,7 +314,7 @@ func (tree *Tree) computeHash() []byte {
 //
 // 	// Phase 5: Always parallel process branch nodes by height (if any exist)
 // 	if len(allBranches) > 0 {
-// 		heightMap := make(map[int8][]*nodetypes.Node)
+// 		heightMap := make(map[int8][]*inode.Node)
 // 		var heights []int8
 //
 // 		// Group by height
@@ -338,7 +338,7 @@ func (tree *Tree) computeHash() []byte {
 // 			branchWorkers = max(1, min(branchWorkers, 4)) // Cap at 4 workers, min 1
 //
 // 			if branchWorkers > 1 && len(branches) > 1 { // Much lower threshold - parallel for 2+ nodes
-// 				branchChan := make(chan *nodetypes.Node, min(len(branches), 20))
+// 				branchChan := make(chan *inode.Node, min(len(branches), 20))
 //
 // 				go func() {
 // 					defer close(branchChan)
@@ -406,14 +406,14 @@ func (tree *Tree) computeHash() []byte {
 // 	}
 //
 // 	// Copy results to tree's collections
-// 	tree.branches = make([]*nodetypes.Node, len(allBranches))
+// 	tree.branches = make([]*inode.Node, len(allBranches))
 // 	copy(tree.branches, allBranches)
-// 	tree.leaves = make([]*nodetypes.Node, len(allLeaves))
+// 	tree.leaves = make([]*inode.Node, len(allLeaves))
 // 	copy(tree.leaves, allLeaves)
 //
 // 	// Phase 6: Post-processing (same as original)
-// 	nodesToEvict := make(map[*nodetypes.Node]bool)
-// 	nodesToReturn := make(map[*nodetypes.Node]bool)
+// 	nodesToEvict := make(map[*inode.Node]bool)
+// 	nodesToReturn := make(map[*inode.Node]bool)
 //
 // 	for _, branch := range tree.branches {
 // 		if tree.heightFilter > 0 {
@@ -457,7 +457,7 @@ func (tree *Tree) computeHash() []byte {
 //
 // 	type loadResult struct {
 // 		task *nodeLoadTask
-// 		node *nodetypes.Node
+// 		node *inode.Node
 // 		err  error
 // 	}
 //
@@ -481,7 +481,7 @@ func (tree *Tree) computeHash() []byte {
 // 			conn := connPool[connIdx]
 //
 // 			for task := range taskChan {
-// 				var loadedNode *nodetypes.Node
+// 				var loadedNode *inode.Node
 // 				var err error
 //
 // 				// Load node from database using the dedicated connection
@@ -543,9 +543,9 @@ func (tree *Tree) computeHash() []byte {
 // }
 
 // Original deepHash function kept for reference
-func (tree *Tree) deepHash(node *nodetypes.Node, depth int8) {
+func (tree *Tree) deepHash(node *inode.Node, depth int8) {
 	type nodeWithDepth struct {
-		node    *nodetypes.Node
+		node    *inode.Node
 		depth   int8
 		visited bool // Flag to track if children have been visited
 	}
@@ -559,13 +559,13 @@ func (tree *Tree) deepHash(node *nodetypes.Node, depth int8) {
 	stack = append(stack, nodeWithDepth{node: node, depth: depth, visited: false})
 
 	// Pre-allocate slices for append operations to avoid reallocations
-	tree.dirtyNodes.Branches = make([]*nodetypes.Node, 0, estimatedCapacity/2)
-	tree.dirtyNodes.Leaves = make([]*nodetypes.Node, 0, estimatedCapacity/2)
+	tree.dirtyNodes.Branches = make([]*inode.Node, 0, estimatedCapacity/2)
+	tree.dirtyNodes.Leaves = make([]*inode.Node, 0, estimatedCapacity/2)
 
 	// Track nodes that should be evicted but not returned to pool yet
-	nodesToEvict := make(map[*nodetypes.Node]bool)
+	nodesToEvict := make(map[*inode.Node]bool)
 	// Track nodes that should be returned to pool after hash calculation
-	nodesToReturn := make(map[*nodetypes.Node]bool)
+	nodesToReturn := make(map[*inode.Node]bool)
 
 	// Process nodes in a depth-first manner using a stack
 	for len(stack) > 0 {
@@ -652,7 +652,7 @@ func (tree *Tree) deepHash(node *nodetypes.Node, depth int8) {
 }
 
 // estimateCapacity uses subtree height for better memory pre-allocation
-func (tree *Tree) estimateCapacity(rootNode *nodetypes.Node) (int, int) {
+func (tree *Tree) estimateCapacity(rootNode *inode.Node) (int, int) {
 	if rootNode == nil {
 		return 64, 32
 	}

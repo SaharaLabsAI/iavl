@@ -3,8 +3,8 @@ package db
 import (
 	"sync/atomic"
 
-	nodepool "github.com/cosmos/iavl/v2/pool/node"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 type DBType int
@@ -31,8 +31,8 @@ type ReadonlyDB interface {
 }
 
 type HashConn interface {
-	GetLeaf(pool *nodepool.NodePool, nodekey nodetypes.NodeKey) (*nodetypes.Node, error)
-	GetNode(pool *nodepool.NodePool, nodekey nodetypes.NodeKey) (*nodetypes.Node, error)
+	GetLeaf(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
+	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
 }
 
 type HashConnPool interface {
@@ -42,18 +42,18 @@ type HashConnPool interface {
 type DBRead interface {
 	Path() string
 	ResetRead() error
-	GetLeftNode(node *nodetypes.Node) (*nodetypes.Node, error)
-	GetRightNode(node *nodetypes.Node) (*nodetypes.Node, error)
+	GetLeftNode(node *inode.Node) (*inode.Node, error)
+	GetRightNode(node *inode.Node) (*inode.Node, error)
 	GetVersioned(key []byte, version int64) ([]byte, error)
 	LatestVersion() (int64, error)
 	HasRoot(version int64) (bool, error)
-	LoadRoot(version int64) (*nodetypes.Node, error)
+	LoadRoot(version int64) (*inode.Node, error)
 	SetInitTreeVersion(version *atomic.Int64)
 }
 
 type DBWrite interface {
-	SaveRoot(version int64, node *nodetypes.Node) error
-	SaveTree(root *nodetypes.Node, version int64, dirtyNodes *DirtyNodes) error
+	SaveRoot(version int64, node *inode.Node) error
+	SaveTree(root *inode.Node, version int64, dirtyNodes *DirtyNodes) error
 	Revert(version int64) error
 	PausePruning(pause bool)
 	DeleteVersionsTo(toVersion int64) error

@@ -170,7 +170,7 @@ package tree
 // // If the key does not exist, returns the path to the next leaf left of key (w/
 // // path), except when key is less than the least item, in which case it returns
 // // a path to the least item.
-// func (tree *Tree) PathToLeaf(node *nodetypes.Node, key []byte) (PathToLeaf, *nodetypes.Node, error) {
+// func (tree *Tree) PathToLeaf(node *inode.Node, key []byte) (PathToLeaf, *inode.Node, error) {
 // 	path := new(PathToLeaf)
 // 	val, err := tree.pathToLeaf(node, key, path)
 // 	return *path, val, err
@@ -179,7 +179,7 @@ package tree
 // // pathToLeaf is a helper which recursively constructs the PathToLeaf.
 // // As an optimization the already constructed path is passed in as an argument
 // // and is shared among recursive calls.
-// func (tree *Tree) pathToLeaf(node *nodetypes.Node, key []byte, path *PathToLeaf) (*nodetypes.Node, error) {
+// func (tree *Tree) pathToLeaf(node *inode.Node, key []byte, path *PathToLeaf) (*inode.Node, error) {
 // 	if node.SubTreeHeight() == 0 {
 // 		if bytes.Equal(node.Key(), key) {
 // 			return node, nil

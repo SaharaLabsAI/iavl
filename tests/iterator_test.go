@@ -1,4 +1,4 @@
-package tree_test
+package tests
 
 // func Test_Iterator(t *testing.T) {
 // 	pool := iavl.NewNodePool()

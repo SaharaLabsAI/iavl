@@ -11,12 +11,12 @@ import (
 	"github.com/eatonphil/gosqlite"
 	api "github.com/kocubinski/costor-api"
 
-	"github.com/cosmos/iavl/v2/constants"
+	"github.com/cosmos/iavl/v2/common/constants"
+	"github.com/cosmos/iavl/v2/common/logger"
+	"github.com/cosmos/iavl/v2/common/metrics"
+	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	"github.com/cosmos/iavl/v2/db"
-	"github.com/cosmos/iavl/v2/logger"
-	"github.com/cosmos/iavl/v2/metrics"
-	nodepool "github.com/cosmos/iavl/v2/pool/node"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 type SqliteDb struct {
@@ -100,7 +100,7 @@ func (sql *SqliteDb) Type() db.DBType {
 	return db.SQLITE
 }
 
-func (sql *SqliteDb) SaveTree(root *nodetypes.Node, version int64, updates *db.DirtyNodes) error {
+func (sql *SqliteDb) SaveTree(root *inode.Node, version int64, updates *db.DirtyNodes) error {
 	sql.readPool.SetSavingTree()
 	defer sql.readPool.UnsetSavingTree()
 
@@ -137,7 +137,7 @@ func (sql *SqliteDb) PausePruning(pause bool) {
 	sql.writeEv.pausePruning.Store(pause)
 }
 
-func (sql *SqliteDb) SaveRoot(version int64, root *nodetypes.Node) error {
+func (sql *SqliteDb) SaveRoot(version int64, root *inode.Node) error {
 	return sql.writeDb.SaveRoot(version, root)
 }
 
@@ -338,7 +338,7 @@ func (sql *SqliteDb) returnHashConns(conns []*SqliteReadConn) {
 	}
 }
 
-func (sql *SqliteDb) getLeaf(nodeKey nodetypes.NodeKey) (*nodetypes.Node, error) {
+func (sql *SqliteDb) getLeaf(nodeKey inode.NodeKey) (*inode.Node, error) {
 	// Fallback to old method for backward compatibility
 	start := time.Now()
 	defer func() {
@@ -354,7 +354,7 @@ func (sql *SqliteDb) getLeaf(nodeKey nodetypes.NodeKey) (*nodetypes.Node, error)
 	return conn.getLeaf(sql.nodePool, nodeKey)
 }
 
-func (sql *SqliteDb) getNode(nodeKey nodetypes.NodeKey) (*nodetypes.Node, error) {
+func (sql *SqliteDb) getNode(nodeKey inode.NodeKey) (*inode.Node, error) {
 	start := time.Now()
 	defer func() {
 		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get")
@@ -412,7 +412,7 @@ func (sql *SqliteDb) Close() error {
 	return nil
 }
 
-func (sql *SqliteDb) LoadRoot(version int64) (*nodetypes.Node, error) {
+func (sql *SqliteDb) LoadRoot(version int64) (*inode.Node, error) {
 	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return nil, err
@@ -443,10 +443,10 @@ func (sql *SqliteDb) LoadRoot(version int64) (*nodetypes.Node, error) {
 	}
 
 	// if nodeBz is nil then a (valid) empty tree was saved, which a nil root represents
-	var root *nodetypes.Node
+	var root *inode.Node
 	if nodeBz != nil {
-		rootKey := nodetypes.NewNodeKey(nodeVersion, uint32(nodeSeq))
-		root, err = nodetypes.Decode(sql.nodePool, rootKey, nodeBz)
+		rootKey := inode.NewNodeKey(nodeVersion, uint32(nodeSeq))
+		root, err = inode.Decode(sql.nodePool, rootKey, nodeBz)
 		if err != nil {
 			return nil, err
 		}
@@ -583,8 +583,8 @@ func (sql *SqliteDb) closeHangingIterators() error {
 // 			lastVersion = version - 1
 // 		}
 // 		if bz != nil {
-// 			nk := nodetypes.NewNodeKey(0, 0)
-// 			node, err := nodetypes.Decode(tree.pool, nk, bz)
+// 			nk := inode.NewNodeKey(0, 0)
+// 			node, err := inode.Decode(tree.pool, nk, bz)
 // 			if err != nil {
 // 				return err
 // 			}

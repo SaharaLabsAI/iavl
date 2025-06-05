@@ -9,8 +9,8 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
 
-	"github.com/cosmos/iavl/v2/logger"
-	"github.com/cosmos/iavl/v2/metrics"
+	"github.com/cosmos/iavl/v2/common/logger"
+	"github.com/cosmos/iavl/v2/common/metrics"
 )
 
 const defaultSQLitePath = "/tmp/iavl2"

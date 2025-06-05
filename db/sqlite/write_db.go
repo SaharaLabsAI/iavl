@@ -7,10 +7,10 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
 
-	"github.com/cosmos/iavl/v2/logger"
-	"github.com/cosmos/iavl/v2/metrics"
-	"github.com/cosmos/iavl/v2/pool"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	"github.com/cosmos/iavl/v2/common/logger"
+	"github.com/cosmos/iavl/v2/common/metrics"
+	"github.com/cosmos/iavl/v2/common/pool"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 type WriteDB struct {
@@ -60,7 +60,7 @@ func NewWriteDB(opts SqliteDbOptions) (*WriteDB, error) {
 	return wdb, nil
 }
 
-func (sql *WriteDB) SaveRoot(version int64, node *nodetypes.Node) error {
+func (sql *WriteDB) SaveRoot(version int64, node *inode.Node) error {
 	if node != nil {
 		buf := pool.BufPool.Get().(*bytes.Buffer)
 		buf.Reset()

@@ -9,11 +9,11 @@ import (
 	"github.com/eatonphil/gosqlite"
 	"lukechampine.com/blake3"
 
+	"github.com/cosmos/iavl/v2/common/logger"
+	"github.com/cosmos/iavl/v2/common/metrics"
+	"github.com/cosmos/iavl/v2/common/pool"
 	"github.com/cosmos/iavl/v2/db"
-	"github.com/cosmos/iavl/v2/logger"
-	"github.com/cosmos/iavl/v2/metrics"
-	"github.com/cosmos/iavl/v2/pool"
-	nodetypes "github.com/cosmos/iavl/v2/types/node"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 const defaultWriteBatchSize = 200_000
@@ -59,7 +59,7 @@ func (b *WriteBatch) changelogBatchCommitBegin() error {
 	return b.sql.leafWrite.Exec("Commit; Begin")
 }
 
-func (b *WriteBatch) execBranchOrphan(nodeKey nodetypes.NodeKey) error {
+func (b *WriteBatch) execBranchOrphan(nodeKey inode.NodeKey) error {
 	return b.treeOrphan.Exec(nodeKey.Version(), int(nodeKey.Sequence()), b.updates.Version)
 }
 

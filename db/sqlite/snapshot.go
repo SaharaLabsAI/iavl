@@ -286,9 +286,10 @@ func (sql *SqliteDb) WriteSnapshot(
 		root           *inode.Node
 		uniqueVersions map[int64]struct{}
 	)
-	if opts.TraverseOrder == constants.PostOrder {
+	switch opts.TraverseOrder {
+	case constants.PostOrder:
 		root, uniqueVersions, err = snap.restorePostOrderStep(nextFn)
-	} else if opts.TraverseOrder == constants.PreOrder {
+	case constants.PreOrder:
 		root, uniqueVersions, err = snap.restorePreOrderStep(nextFn)
 	}
 	if err != nil {
@@ -304,7 +305,7 @@ func (sql *SqliteDb) WriteSnapshot(
 		versions = append(versions, v)
 	}
 
-	if err = sql.SaveRoot(version, root); err != nil {
+	if err = sql.SaveTree(version, root, nil); err != nil {
 		return nil, err
 	}
 
@@ -335,9 +336,10 @@ func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder consta
 	}
 
 	var q *gosqlite.Stmt
-	if traverseOrder == constants.PostOrder {
+	switch traverseOrder {
+	case constants.PostOrder:
 		q, err = read.Prepare(fmt.Sprintf("SELECT version, sequence, bytes FROM snapshot_%d ORDER BY ordinal DESC", version))
-	} else if traverseOrder == constants.PreOrder {
+	case constants.PreOrder:
 		q, err = read.Prepare(fmt.Sprintf("SELECT version, sequence, bytes FROM snapshot_%d ORDER BY ordinal ASC", version))
 	}
 	if err != nil {
@@ -357,10 +359,12 @@ func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder consta
 		since:      time.Now(),
 		log:        sql.logger,
 	}
+
 	var root *inode.Node
-	if traverseOrder == constants.PostOrder {
+	switch traverseOrder {
+	case constants.PostOrder:
 		root, err = imp.queryStepPostOrder()
-	} else if traverseOrder == constants.PreOrder {
+	case constants.PreOrder:
 		root, err = imp.queryStepPreOrder()
 	}
 	if err != nil {

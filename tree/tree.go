@@ -9,7 +9,7 @@ import (
 	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
-	ndb "github.com/cosmos/iavl/v2/db"
+	idb "github.com/cosmos/iavl/v2/db"
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
@@ -28,8 +28,8 @@ type Tree struct {
 	metricsProxy   metrics.Proxy
 
 	// state
-	db         ndb.DB
-	dirtyNodes *ndb.DirtyNodes
+	db         idb.DB
+	dirtyNodes *idb.DirtyNodes
 
 	leafSequence   uint32
 	branchSequence uint32
@@ -44,10 +44,10 @@ type Tree struct {
 	rw sync.RWMutex
 }
 
-func NewTree(db ndb.DB, pool *nodepool.NodePool, opts Options) *Tree {
+func NewTree(db idb.DB, pool *nodepool.NodePool, opts Options) *Tree {
 	tree := &Tree{
 		db:             db,
-		dirtyNodes:     &ndb.DirtyNodes{},
+		dirtyNodes:     &idb.DirtyNodes{},
 		nodePool:       pool,
 		metrics:        opts.MetricsProxy,
 		maxWorkingSize: 1.5 * 1024 * 1024 * 1024,
@@ -197,7 +197,7 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 	tree.resetSequences()
 	tree.dirtyNodes.Version = savedTreeVersion
 
-	err := tree.db.SaveTree(tree.root, savedTreeVersion, tree.dirtyNodes)
+	err := tree.db.SaveTree(savedTreeVersion, tree.root, tree.dirtyNodes)
 	if err != nil {
 		return nil, dirtyTreeVersion, err
 	}
@@ -213,7 +213,6 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 			}
 		}
 	}
-
 	for _, branch := range tree.dirtyNodes.Branches {
 		if branch.Evict() {
 			tree.returnNode(branch)

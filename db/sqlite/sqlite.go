@@ -111,9 +111,13 @@ func (sql *SqliteDb) Type() db.Type {
 	return db.SQLITE
 }
 
-func (sql *SqliteDb) SaveTree(root *inode.Node, version int64, updates *db.DirtyNodes) error {
+func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.DirtyNodes) error {
 	sql.readPool.SetSavingTree()
 	defer sql.readPool.UnsetSavingTree()
+
+	if updates == nil {
+		return sql.writeDb.SaveRoot(version, root)
+	}
 
 	return sql.writeEv.SaveTree(root, version, updates)
 }
@@ -146,10 +150,6 @@ func (sql *SqliteDb) Revert(toVersion int64) error {
 
 func (sql *SqliteDb) PausePruning(pause bool) {
 	sql.writeEv.pausePruning.Store(pause)
-}
-
-func (sql *SqliteDb) SaveRoot(version int64, root *inode.Node) error {
-	return sql.writeDb.SaveRoot(version, root)
 }
 
 func (sql *SqliteDb) DeleteVersionsTo(toVersion int64) error {

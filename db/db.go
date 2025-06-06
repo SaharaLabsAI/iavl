@@ -56,8 +56,7 @@ type Read interface {
 }
 
 type Write interface {
-	SaveRoot(version int64, node *inode.Node) error
-	SaveTree(root *inode.Node, version int64, dirtyNodes *DirtyNodes) error
+	SaveTree(version int64, root *inode.Node, dirtyNodes *DirtyNodes) error
 	Revert(version int64) error
 	PausePruning(pause bool)
 	DeleteVersionsTo(toVersion int64) error

@@ -177,7 +177,7 @@ func (i *Importer) Commit() error {
 	switch len(i.stack) {
 	case 0:
 		// Should handle tree.root == nil special case
-		if err := i.tree.db.SaveRoot(i.version, nil); err != nil {
+		if err := i.tree.db.SaveTree(i.version, nil, nil); err != nil {
 			return err
 		}
 		i.tree.root = nil
@@ -191,7 +191,7 @@ func (i *Importer) Commit() error {
 		if err := i.writeNode(n); err != nil {
 			return err
 		}
-		if err := i.tree.db.SaveRoot(i.version, n); err != nil {
+		if err := i.tree.db.SaveTree(i.version, n, nil); err != nil {
 			return err
 		}
 		i.tree.root = n

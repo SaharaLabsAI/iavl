@@ -112,7 +112,9 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 
 	go func() {
 		runtime.LockOSThread()
-		unix.Setpriority(unix.PRIO_PROCESS, 0, -20)
+		if err := unix.Setpriority(unix.PRIO_PROCESS, 0, -20); err != nil {
+			w.logger.Warn("tree loop set priority", "error", err)
+		}
 
 		close(treeStarted)
 
@@ -124,7 +126,9 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 	}()
 	go func() {
 		runtime.LockOSThread()
-		unix.Setpriority(unix.PRIO_PROCESS, 0, -20)
+		if err := unix.Setpriority(unix.PRIO_PROCESS, 0, -20); err != nil {
+			w.logger.Warn("leaf loop set priority", "error", err)
+		}
 
 		close(leafStarted)
 
@@ -566,7 +570,7 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 		}
 
 		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
-			w.logger.Error("failed tree checkpoint; %w", err)
+			w.logger.Error("failed tree wal_checkpoint", "error", err)
 		}
 
 		if err := w.sql.treeWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {

@@ -26,10 +26,12 @@ func (tree *Tree) LoadSnapshot(version int64, traverseOrder constants.TraverseOr
 	if v < version {
 		return fmt.Errorf("requested %d found snapshot %d, replay not yet supported", version, v)
 	}
+
 	tree.version.Store(v)
 	tree.hashedVersion = v
 	tree.cache = make(map[string][]byte)
 	tree.deleted = make(map[string]bool)
+
 	return nil
 }
 

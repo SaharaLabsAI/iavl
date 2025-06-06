@@ -32,7 +32,7 @@ func rehashTree(node *inode.Node) {
 	rehashTree(node.LeftNode())
 	rehashTree(node.RightNode())
 
-	node.HashNode()
+	node.HashSelf()
 }
 
 func Test_TreeHash(t *testing.T) {
@@ -330,36 +330,36 @@ func Test_PruneLogic(t *testing.T) {
 	}
 }
 
-// func Tesitree_Build_Load(t *testing.T) {
-// 	tmpDir := t.TempDir()
-// 	opts := testutil.NewTreeBuildOptions().With10_000()
-// 	multiTree := NewMultiTree(NewTestLogger(), tmpDir, Options{
-// 		HeightFilter: 0, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
-// 	})
-// 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
-// 	require.True(t, ok)
-// 	for _, sk := range itrs.StoreKeys() {
-// 		require.NoError(t, multiTree.Mounitree(sk))
-// 	}
-// 	t.Log("building initial tree to version 10,000")
-// 	_, err := multiTree.TestBuild(opts)
-// 	require.NoError(t, err)
-//
-// 	t.Log("snapshot tree at version 10,000")
-// 	// take a snapshot at version 10,000
-// 	require.NoError(t, multiTree.SnapshotConcurrently())
-// 	require.NoError(t, multiTree.Close())
-//
-// 	t.Log("import snapshot into new tree")
-// 	mt, err := ImportMultiTree(NewTestLogger(), 10_000, tmpDir, DefaulitreeOptions())
-// 	require.NoError(t, err)
-//
-// 	t.Log("build tree to version 12,000 and verify hash")
-// 	require.NoError(t, opts.Iterator.Next())
-// 	require.Equal(t, int64(10_001), opts.Iterator.Version())
-// 	opts.Until = 12_000
-// 	opts.UntilHash = "3a037f8dd67a5e1a9ef83a53b81c619c9ac0233abee6f34a400fb9b9dfbb4f8d"
-// 	_, err = mt.TestBuild(opts)
-// 	require.NoError(t, err)
-// 	require.NoError(t, mt.Close())
-// }
+func Test_TreeBuildLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts := testutil.NewTreeBuildOptions().With10_000()
+	multiTree := testutil.NewMultiTree(logger.NewTestLogger(), tmpDir, itree.Options{
+		HeightFilter: 0, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
+	})
+	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
+	require.True(t, ok)
+	for _, sk := range itrs.StoreKeys() {
+		require.NoError(t, multiTree.MountTree(sk))
+	}
+	t.Log("building initial tree to version 10,000")
+	_, err := multiTree.TestBuild(opts)
+	require.NoError(t, err)
+
+	t.Log("snapshot tree at version 10,000")
+	// take a snapshot at version 10,000
+	require.NoError(t, multiTree.SnapshotConcurrently())
+	require.NoError(t, multiTree.Close())
+
+	t.Log("import snapshot into new tree")
+	mt, err := testutil.ImportMultiTree(logger.NewTestLogger(), 10_000, tmpDir, itree.DefaultOptions())
+	require.NoError(t, err)
+
+	t.Log("build tree to version 12,000 and verify hash")
+	require.NoError(t, opts.Iterator.Next())
+	require.Equal(t, int64(10_001), opts.Iterator.Version())
+	opts.Until = 12_000
+	opts.UntilHash = "3a037f8dd67a5e1a9ef83a53b81c619c9ac0233abee6f34a400fb9b9dfbb4f8d"
+	_, err = mt.TestBuild(opts)
+	require.NoError(t, err)
+	require.NoError(t, mt.Close())
+}

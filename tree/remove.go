@@ -142,9 +142,9 @@ func (tree *Tree) iterativeRemove(node *inode.Node, key []byte) (newSelf *inode.
 			// Visit the appropriate child node based on key comparison
 			var childNode *inode.Node
 			if currentFrame.goLeft {
-				childNode = tree.ensureLeftNode(currentNode)
+				childNode = tree.EnsureLeftNode(currentNode)
 			} else {
-				childNode = tree.ensureRightNode(currentNode)
+				childNode = tree.EnsureRightNode(currentNode)
 			}
 
 			// Add child to the stack
@@ -194,7 +194,7 @@ func (tree *Tree) iterativeRemove(node *inode.Node, key []byte) (newSelf *inode.
 				if childResult.node == nil {
 					// Left node held value, was removed
 					// Collapse `node.rightNode` into `node`
-					rightNode := tree.ensureRightNode(currentNode)
+					rightNode := tree.EnsureRightNode(currentNode)
 					resultKey = currentNode.Key() // Important: pass the current node's key up
 					nodesToReturn[currentNode] = true
 					resultNode = rightNode
@@ -223,7 +223,7 @@ func (tree *Tree) iterativeRemove(node *inode.Node, key []byte) (newSelf *inode.
 				if childResult.node == nil {
 					// Right node held value, was removed
 					// Collapse `node.leftNode` into `node`
-					leftNode := tree.ensureLeftNode(currentNode)
+					leftNode := tree.EnsureLeftNode(currentNode)
 					nodesToReturn[currentNode] = true
 					resultNode = leftNode
 					// No new key when right node is removed and replaced with left node

@@ -75,7 +75,7 @@ func NewImporter(tree *Tree, version int64) (*Importer, error) {
 
 // writeNode writes the node content to the storage.
 func (i *Importer) writeNode(node *inode.Node) error {
-	node.HashNode()
+	node.HashSelf()
 
 	if node.IsLeaf() {
 		i.tree.dirtyNodes.AddLeaf(node)

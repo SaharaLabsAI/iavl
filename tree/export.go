@@ -4,15 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cosmos/iavl/v2/common/constants"
 	inode "github.com/cosmos/iavl/v2/node"
-)
-
-// TraverseOrderType is the type of the order in which the tree is traversed.
-type TraverseOrderType uint8
-
-const (
-	PreOrder TraverseOrderType = iota
-	PostOrder
 )
 
 const maxOutChanSize = 8192
@@ -22,7 +15,7 @@ type stackEntry struct {
 	state int // 0: process left, 1: process right, 2: process self
 }
 
-func (tree *Tree) Export(order TraverseOrderType) *Exporter {
+func (tree *Tree) Export(order constants.TraverseOrderType) *Exporter {
 	imTree, err := tree.GetImmutableProvable(tree.version.Load())
 	if err != nil {
 		panic(err)
@@ -37,14 +30,14 @@ func (tree *Tree) Export(order TraverseOrderType) *Exporter {
 		version: imTree.version.Load(),
 	}
 
-	go func(traverseOrder TraverseOrderType) {
+	go func(traverseOrder constants.TraverseOrderType) {
 		defer close(exporter.out)
 		defer close(exporter.errCh)
 
 		switch traverseOrder {
-		case PostOrder:
+		case constants.PostOrder:
 			exporter.postOrderNext(imTree.root)
-		case PreOrder:
+		case constants.PreOrder:
 			exporter.preOrderNext(imTree.root)
 		}
 	}(order)
@@ -52,7 +45,7 @@ func (tree *Tree) Export(order TraverseOrderType) *Exporter {
 	return exporter
 }
 
-func (tree *Tree) ExportVersion(version int64, order TraverseOrderType) (*Exporter, error) {
+func (tree *Tree) ExportVersion(version int64, order constants.TraverseOrderType) (*Exporter, error) {
 	got, _ := tree.getRecentRoot(version)
 	if got {
 		return tree.Export(order), nil
@@ -77,15 +70,15 @@ func (tree *Tree) ExportVersion(version int64, order TraverseOrderType) (*Export
 		return exporter, nil
 	}
 
-	go func(traverseOrder TraverseOrderType) {
+	go func(traverseOrder constants.TraverseOrderType) {
 		defer close(exporter.out)
 		defer close(exporter.errCh)
 
 		switch traverseOrder {
 
-		case PostOrder:
+		case constants.PostOrder:
 			exporter.postOrderNext(imTree.root)
-		case PreOrder:
+		case constants.PreOrder:
 			exporter.preOrderNext(imTree.root)
 		}
 	}(order)

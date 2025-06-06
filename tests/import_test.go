@@ -8,6 +8,7 @@ import (
 	"github.com/cosmos/iavl-bench/bench"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/logger"
 	inode "github.com/cosmos/iavl/v2/node"
 	testutil "github.com/cosmos/iavl/v2/tests/util"
@@ -40,7 +41,7 @@ func Test_ExportImport(t *testing.T) {
 
 	// Export
 	for sk, tree := range multiTree.Trees {
-		exporter := tree.Export(itree.PostOrder)
+		exporter := tree.Export(constants.PostOrder)
 		defer exporter.Close()
 		require.NotNil(t, exporter)
 		for {

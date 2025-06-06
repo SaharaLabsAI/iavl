@@ -590,8 +590,8 @@ func (tree *Tree) deepHash(node *inode.Node, depth int8) {
 			stack = append(stack, current)
 
 			// Fetch both children at once to reduce function calls
-			leftNode := tree.ensureLeftNode(current.node)
-			rightNode := tree.ensureRightNode(current.node)
+			leftNode := tree.EnsureLeftNode(current.node)
+			rightNode := tree.EnsureRightNode(current.node)
 
 			// Push children to process first (post-order traversal)
 			// Add right then left, so left is processed first due to LIFO stack
@@ -602,7 +602,7 @@ func (tree *Tree) deepHash(node *inode.Node, depth int8) {
 
 		// Process the node after its children have been visited
 		tree.dirtyNodes.AddBranch(current.node)
-		current.node.HashNode()
+		current.node.HashSelf()
 
 		// Apply height filter if enabled - combined conditional checks
 		if tree.heightFilter > 0 {

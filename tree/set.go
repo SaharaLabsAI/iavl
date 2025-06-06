@@ -180,9 +180,9 @@ func (tree *Tree) iterativeSet(node *inode.Node, key []byte, value []byte) (
 				// Add frame for child node traversal
 				var childNode *inode.Node
 				if currentFrame.goLeft {
-					childNode = tree.ensureLeftNode(currentNode)
+					childNode = tree.EnsureLeftNode(currentNode)
 				} else {
-					childNode = tree.ensureRightNode(currentNode)
+					childNode = tree.EnsureRightNode(currentNode)
 				}
 
 				// Push child onto stack

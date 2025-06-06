@@ -18,7 +18,7 @@ var (
 
 // Computes the hash of the node without computing its descendants. Must be
 // called on nodes which have descendant node hashes already computed.
-func (node *Node) HashNode() []byte {
+func (node *Node) HashSelf() []byte {
 	node.CheckValid()
 	if node.hash != nil {
 		return node.hash
@@ -89,7 +89,7 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 			leftHash = node.leftNode.hash
 			if leftHash == nil {
 				// Compute hash if needed - this is safer than panicking
-				leftHash = node.leftNode.HashNode()
+				leftHash = node.leftNode.HashSelf()
 			}
 		}
 
@@ -105,7 +105,7 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 			rightHash = node.rightNode.hash
 			if rightHash == nil {
 				// Compute hash if needed - this is safer than panicking
-				rightHash = node.rightNode.HashNode()
+				rightHash = node.rightNode.HashSelf()
 			}
 		}
 

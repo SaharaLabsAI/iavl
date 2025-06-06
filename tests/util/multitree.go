@@ -12,6 +12,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 
+	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/logger"
 	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
@@ -50,53 +51,53 @@ func NewMultiTree(logger logger.Logger, rootPath string, opts itree.Options) *Mu
 	}
 }
 
-// func ImportMultiTree(logger logger.Logger, version int64, path string, treeOpts itree.Options) (*MultiTree, error) {
-// 	mt := NewMultiTree(logger, path, treeOpts)
-// 	paths, err := comutil.FindDbsInPath(path)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	var (
-// 		cnt  = 0
-// 		done = make(chan struct {
-// 			path string
-// 			tree *itree.Tree
-// 		})
-// 		errs = make(chan error)
-// 	)
-// 	for _, dbPath := range paths {
-// 		cnt++
-// 		go func(p string) {
-// 			tree, err := mt.newTree(p)
-// 			if err != nil {
-// 				errs <- err
-// 			}
-// 			importErr := tree.LoadSnapshot(version, itree.PreOrder)
-//
-// 			if importErr != nil {
-// 				errs <- fmt.Errorf("err while importing %s; %w", p, importErr)
-// 				return
-// 			}
-// 			done <- struct {
-// 				path string
-// 				tree *itree.Tree
-// 			}{p, tree}
-// 		}(dbPath)
-// 	}
-//
-// 	for i := 0; i < cnt; i++ {
-// 		select {
-// 		case err = <-errs:
-// 			return nil, err
-// 		case res := <-done:
-// 			prefix := filepath.Base(res.path)
-// 			logger.Info(fmt.Sprintf("imported %s", prefix))
-// 			mt.Trees[prefix] = res.tree
-// 		}
-// 	}
-//
-// 	return mt, nil
-// }
+func ImportMultiTree(logger logger.Logger, version int64, path string, treeOpts itree.Options) (*MultiTree, error) {
+	mt := NewMultiTree(logger, path, treeOpts)
+	paths, err := comutil.FindDbsInPath(path)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		cnt  = 0
+		done = make(chan struct {
+			path string
+			tree *itree.Tree
+		})
+		errs = make(chan error)
+	)
+	for _, dbPath := range paths {
+		cnt++
+		go func(p string) {
+			tree, err := mt.newTree(p)
+			if err != nil {
+				errs <- err
+			}
+			importErr := tree.LoadSnapshot(version, constants.PreOrder)
+
+			if importErr != nil {
+				errs <- fmt.Errorf("err while importing %s; %w", p, importErr)
+				return
+			}
+			done <- struct {
+				path string
+				tree *itree.Tree
+			}{p, tree}
+		}(dbPath)
+	}
+
+	for i := 0; i < cnt; i++ {
+		select {
+		case err = <-errs:
+			return nil, err
+		case res := <-done:
+			prefix := filepath.Base(res.path)
+			logger.Info(fmt.Sprintf("imported %s", prefix))
+			mt.Trees[prefix] = res.tree
+		}
+	}
+
+	return mt, nil
+}
 
 func (mt *MultiTree) MountTree(storeKey string) error {
 	dbPath := filepath.Join(mt.rootPath, storeKey)
@@ -217,30 +218,30 @@ func (mt *MultiTree) SaveVersionConcurrently() ([]byte, int64, error) {
 	return mt.Hash(), version, errors.Join(errs...)
 }
 
-// func (mt *MultiTree) SnapshotConcurrently() error {
-// 	treeCount := 0
-// 	for _, tree := range mt.Trees {
-// 		treeCount++
-// 		go func(t *itree.Tree) {
-// 			if err := t.SaveSnapshot(); err != nil {
-// 				mt.errorCh <- err
-// 			} else {
-// 				mt.doneCh <- saveVersionResult{}
-// 			}
-// 		}(tree)
-// 	}
-//
-// 	var errs []error
-// 	for i := 0; i < treeCount; i++ {
-// 		select {
-// 		case err := <-mt.errorCh:
-// 			mt.logger.Error("failed to snapshot", "error", err)
-// 			errs = append(errs, err)
-// 		case <-mt.doneCh:
-// 		}
-// 	}
-// 	return errors.Join(errs...)
-// }
+func (mt *MultiTree) SnapshotConcurrently() error {
+	treeCount := 0
+	for _, tree := range mt.Trees {
+		treeCount++
+		go func(t *itree.Tree) {
+			if err := t.SaveSnapshot(); err != nil {
+				mt.errorCh <- err
+			} else {
+				mt.doneCh <- saveVersionResult{}
+			}
+		}(tree)
+	}
+
+	var errs []error
+	for i := 0; i < treeCount; i++ {
+		select {
+		case err := <-mt.errorCh:
+			mt.logger.Error("failed to snapshot", "error", err)
+			errs = append(errs, err)
+		case <-mt.doneCh:
+		}
+	}
+	return errors.Join(errs...)
+}
 
 // Hash is a stand in for code at
 // https://github.com/cosmos/cosmos-sdk/blob/80dd55f79bba8ab675610019a5764470a3e2fef9/store/types/commit_info.go#L30

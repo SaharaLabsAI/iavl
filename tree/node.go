@@ -7,7 +7,7 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-func (tree *Tree) ensureLeftNode(node *inode.Node) *inode.Node {
+func (tree *Tree) EnsureLeftNode(node *inode.Node) *inode.Node {
 	leftNode, err := tree.getLeftNode(node)
 	if err != nil {
 		panic(err)
@@ -16,7 +16,7 @@ func (tree *Tree) ensureLeftNode(node *inode.Node) *inode.Node {
 	return leftNode
 }
 
-func (tree *Tree) ensureRightNode(node *inode.Node) *inode.Node {
+func (tree *Tree) EnsureRightNode(node *inode.Node) *inode.Node {
 	rightNode, err := tree.getRightNode(node)
 	if err != nil {
 		panic(err)

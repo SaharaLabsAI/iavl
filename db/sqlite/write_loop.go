@@ -234,7 +234,7 @@ func (w *WriteEventLoop) leafLoop(ctx context.Context) error {
 		}
 
 		w.logger.Debug(fmt.Sprintf("commit leaf prune count=%s", humanize.Comma(pruneCount)))
-		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
 			return fmt.Errorf("failed to checkpoint; %w", err)
 		}
 
@@ -313,7 +313,7 @@ func (w *WriteEventLoop) leafLoop(ctx context.Context) error {
 		res := &saveResult{}
 		res.n, res.err = sig.batch.saveLeaves()
 
-		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			w.logger.Error("failed leaf wal_checkpoint", "error", err)
 		}
 
@@ -529,7 +529,7 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 			}
 
 			w.logger.Debug(fmt.Sprintf("commit tree prune count=%s", humanize.Comma(pruneCount)))
-			if err = w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+			if err = w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
 				return fmt.Errorf("failed to checkpoint; %w", err)
 			}
 
@@ -569,7 +569,7 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 			return
 		}
 
-		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			w.logger.Error("failed tree wal_checkpoint", "error", err)
 		}
 

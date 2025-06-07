@@ -189,12 +189,22 @@ func (node *Node) SetLeft(leftNode *Node) {
 	}
 }
 
+func (node *Node) SetLeftNodeKey(key NodeKey) {
+	node.CheckValid()
+	node.leftNodeKey = key
+}
+
 func (node *Node) SetRight(rightNode *Node) {
 	node.CheckValid()
 	node.rightNode = rightNode
 	if rightNode != nil {
 		node.rightNodeKey = rightNode.nodeKey
 	}
+}
+
+func (node *Node) SetRightNodeKey(key NodeKey) {
+	node.CheckValid()
+	node.rightNodeKey = key
 }
 
 func (node *Node) EvictChildren() {

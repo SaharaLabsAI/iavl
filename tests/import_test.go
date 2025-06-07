@@ -12,6 +12,7 @@ import (
 	"github.com/cosmos/iavl/v2/common/logger"
 	inode "github.com/cosmos/iavl/v2/node"
 	testutil "github.com/cosmos/iavl/v2/tests/util"
+	imultitree "github.com/cosmos/iavl/v2/tests/util/multitree"
 	itree "github.com/cosmos/iavl/v2/tree"
 )
 
@@ -26,7 +27,7 @@ func Test_ExportImport(t *testing.T) {
 	opts.UntilHash = "0d4dfc4b6f6194f72da11fa254cf2910e54d330e8a4d6238af40e6b8d35ea77f"
 	treeOpts := itree.Options{HeightFilter: 1, StateStorage: true, EvictionDepth: 14}
 
-	multiTree := testutil.NewMultiTree(logger.NewDebugLogger(), tmpDir, treeOpts)
+	multiTree := imultitree.NewMultiTree(logger.NewDebugLogger(), tmpDir, treeOpts)
 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
 	require.True(t, ok)
 	storeKeys := itrs.StoreKeys()
@@ -61,7 +62,7 @@ func Test_ExportImport(t *testing.T) {
 	}
 
 	importDir := t.TempDir()
-	multiTree = testutil.NewMultiTree(logger.NewDebugLogger(), importDir, treeOpts)
+	multiTree = imultitree.NewMultiTree(logger.NewDebugLogger(), importDir, treeOpts)
 	for _, sk := range storeKeys {
 		require.NoError(t, multiTree.MountTree(sk))
 	}

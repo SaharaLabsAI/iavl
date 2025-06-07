@@ -20,6 +20,7 @@ import (
 	"github.com/cosmos/iavl/v2/db/sqlite"
 	inode "github.com/cosmos/iavl/v2/node"
 	testutil "github.com/cosmos/iavl/v2/tests/util"
+	imultitree "github.com/cosmos/iavl/v2/tests/util/multitree"
 	itree "github.com/cosmos/iavl/v2/tree"
 )
 
@@ -52,7 +53,7 @@ func Test_TreeHash(t *testing.T) {
 	}
 
 	testStart := time.Now()
-	multiTree := testutil.NewMultiTree(logger.NewTestLogger(), tmpDir, treeOpts)
+	multiTree := imultitree.NewMultiTree(logger.NewTestLogger(), tmpDir, treeOpts)
 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
 	require.True(t, ok)
 	for _, sk := range itrs.StoreKeys() {
@@ -333,7 +334,7 @@ func Test_PruneLogic(t *testing.T) {
 func Test_TreeBuildLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	opts := testutil.NewTreeBuildOptions().With10_000()
-	multiTree := testutil.NewMultiTree(logger.NewTestLogger(), tmpDir, itree.Options{
+	multiTree := imultitree.NewMultiTree(logger.NewTestLogger(), tmpDir, itree.Options{
 		HeightFilter: 0, StateStorage: true, EvictionDepth: 14, MetricsProxy: metrics.NewStructMetrics(),
 	})
 	itrs, ok := opts.Iterator.(*bench.ChangesetIterators)
@@ -351,7 +352,7 @@ func Test_TreeBuildLoad(t *testing.T) {
 	require.NoError(t, multiTree.Close())
 
 	t.Log("import snapshot into new tree")
-	mt, err := testutil.ImportMultiTree(logger.NewTestLogger(), 10_000, tmpDir, itree.DefaultOptions())
+	mt, err := imultitree.ImportMultiTree(logger.NewTestLogger(), 10_000, tmpDir, itree.DefaultOptions())
 	require.NoError(t, err)
 
 	t.Log("build tree to version 12,000 and verify hash")

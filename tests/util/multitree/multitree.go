@@ -1,4 +1,4 @@
-package util
+package multitree
 
 import (
 	"crypto/sha256"
@@ -18,6 +18,7 @@ import (
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	comutil "github.com/cosmos/iavl/v2/common/util"
 	"github.com/cosmos/iavl/v2/db/sqlite"
+	testutil "github.com/cosmos/iavl/v2/tests/util"
 	itree "github.com/cosmos/iavl/v2/tree"
 )
 
@@ -309,7 +310,7 @@ func (mt *MultiTree) QueryReport(bins int) error {
 	return m.QueryReport(bins)
 }
 
-func (mt *MultiTree) TestBuild(opts *TreeBuildOptions) (int64, error) {
+func (mt *MultiTree) TestBuild(opts *testutil.TreeBuildOptions) (int64, error) {
 	var (
 		version  int64
 		err      error

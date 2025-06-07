@@ -62,7 +62,7 @@ func getPageSize() int {
 	pageSize := os.Getpagesize()
 
 	for pageSize < defaultPageSize {
-		pageSize *= pageSize
+		pageSize *= 2
 	}
 
 	return pageSize

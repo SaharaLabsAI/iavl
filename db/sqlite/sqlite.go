@@ -122,6 +122,10 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 	return sql.writeEv.SaveTree(root, version, updates)
 }
 
+func (sql *SqliteDb) ReadPool() *SqliteReadonlyConnPool {
+	return sql.readPool
+}
+
 // TODO: Remove
 func (sql *SqliteDb) SetInitTreeVersion(version *atomic.Int64) {
 	sql.readPool.LinkTreeVersion(version)
@@ -350,7 +354,7 @@ func (sql *SqliteDb) ReturnHashConns(conns []db.HashConn) {
 	}
 }
 
-func (sql *SqliteDb) getLeaf(nodeKey inode.NodeKey) (*inode.Node, error) {
+func (sql *SqliteDb) GetLeaf(nodeKey inode.NodeKey) (*inode.Node, error) {
 	// Fallback to old method for backward compatibility
 	start := time.Now()
 	defer func() {
@@ -680,7 +684,7 @@ func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
 	return true, nil
 }
 
-func (sql *SqliteDb) getHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
+func (sql *SqliteDb) GetHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
 	fromShardID := ToShardID(start)
 	toShardID := ToShardID(end)
 	if fromShardID != toShardID {

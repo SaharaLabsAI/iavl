@@ -2,11 +2,16 @@ package tree
 
 import (
 	"bytes"
+	"fmt"
 	"time"
+
+	"github.com/eatonphil/gosqlite"
 
 	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
+	"github.com/cosmos/iavl/v2/db"
+	"github.com/cosmos/iavl/v2/db/sqlite"
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
@@ -40,8 +45,7 @@ type Iterator interface {
 
 var (
 	_ Iterator = (*LeafIterator)(nil)
-	// _ Iterator = (*KVIterator)(nil)
-	// _ Iterator = (*WrongBranchHashIterator)(nil)
+	_ Iterator = (*KVIterator)(nil)
 )
 
 type iteratorStackEntry struct {
@@ -503,276 +507,121 @@ func (tree *Tree) IterateRecent(version int64, start, end []byte, ascending bool
 	return true, itr
 }
 
-// type KVIterator struct {
-// 	sql       *SqliteDb
-// 	itrStmt   *gosqlite.Stmt
-// 	start     []byte
-// 	end       []byte
-// 	valid     bool
-// 	err       error
-// 	key       []byte
-// 	value     []byte
-// 	metrics   metrics.Proxy
-// 	itrIdx    int
-// 	ascending bool
-// 	inclusive bool
-// }
-//
-// func (i *KVIterator) Domain() (start []byte, end []byte) {
-// 	return i.start, i.end
-// }
-//
-// func (i *KVIterator) Valid() bool {
-// 	return i.valid
-// }
-//
-// func (i *KVIterator) Next() {
-// 	if i.metrics != nil {
-// 		defer i.metrics.MeasureSince(time.Now(), "iavl2", "kv iterator", "next")
-// 	}
-// 	if !i.valid {
-// 		return
-// 	}
-//
-// 	hasRow, err := i.itrStmt.Step()
-// 	if err != nil {
-// 		closeErr := i.Close()
-// 		if closeErr != nil {
-// 			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 		}
-// 		return
-// 	}
-// 	if !hasRow {
-// 		closeErr := i.Close()
-// 		if closeErr != nil {
-// 			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 		}
-// 		return
-// 	}
-//
-// 	var nodeBz gosqlite.RawBytes
-// 	if err = i.itrStmt.Scan(&i.key, &nodeBz); err != nil {
-// 		closeErr := i.Close()
-// 		if closeErr != nil {
-// 			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 		}
-// 		return
-// 	}
-//
-// 	i.value, err = extractValue(nodeBz)
-// 	if err != nil {
-// 		closeErr := i.Close()
-// 		if closeErr != nil {
-// 			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 		}
-// 		return
-// 	}
-// }
-//
-// func (i *KVIterator) Key() (key []byte) {
-// 	return i.key
-// }
-//
-// func (i *KVIterator) Value() (value []byte) {
-// 	return i.value
-// }
-//
-// func (i *KVIterator) Error() error {
-// 	return i.err
-// }
-//
-// func (i *KVIterator) Close() error {
-// 	if i.valid {
-// 		if i.metrics != nil {
-// 			i.metrics.IncrCounter(1, "iavl2", "iterator", "close")
-// 		}
-// 		i.valid = false
-// 		return i.sql.readPool.CloseKVIterstor(i.itrIdx)
-// 	}
-// 	return nil
-// }
-//
-// func (tree *Tree) IteratorVersionDescLeaves(version int64, limit int) (Iterator, error) {
-// 	var err error
-// 	kvItr := &KVIterator{
-// 		sql:     tree.sql,
-// 		valid:   true,
-// 		metrics: tree.metricsProxy,
-// 	}
-//
-// 	kvItr.itrStmt, kvItr.itrIdx, err = tree.sql.readPool.GetVersionDescLeafIterator(version, limit)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	if tree.metricsProxy != nil {
-// 		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
-// 	}
-//
-// 	kvItr.Next()
-//
-// 	return kvItr, err
-//
-// }
-//
-// func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
-// 	var err error
-// 	itr := &WrongBranchHashIterator{
-// 		sql:     tree.sql,
-// 		start:   start,
-// 		end:     end,
-// 		valid:   true,
-// 		metrics: tree.metricsProxy,
-// 	}
-//
-// 	itr.itrStmt, err = tree.sql.getHeightOneBranchesIteratorQuery(start, end)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	if tree.metricsProxy != nil {
-// 		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
-// 	}
-//
-// 	itr.Next()
-//
-// 	return itr, err
-// }
-//
-// type WrongBranchHashIterator struct {
-// 	sql     *SqliteDb
-// 	itrStmt *gosqlite.Stmt
-// 	valid   bool
-// 	start   int64
-// 	end     int64
-// 	err     error
-// 	key     []byte
-// 	value   []byte
-// 	metrics metrics.Proxy
-// }
-//
-// func (i *WrongBranchHashIterator) Domain() (strat []byte, end []byte) {
-// 	s := make([]byte, 8)
-// 	binary.BigEndian.PutUint64(s, uint64(i.start))
-//
-// 	e := make([]byte, 8)
-// 	binary.BigEndian.PutUint64(e, uint64(i.end))
-//
-// 	return s, e
-// }
-//
-// func (i *WrongBranchHashIterator) Valid() bool {
-// 	return i.valid
-// }
-//
-// func (i *WrongBranchHashIterator) Next() {
-// 	if i.metrics != nil {
-// 		defer i.metrics.MeasureSince(time.Now(), "iavl2", "kv iterator", "next")
-// 	}
-// 	if !i.valid {
-// 		return
-// 	}
-//
-// 	for {
-// 		hasRow, err := i.itrStmt.Step()
-// 		if err != nil {
-// 			closeErr := i.Close()
-// 			if closeErr != nil {
-// 				i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 			}
-// 			return
-// 		}
-//
-// 		if !hasRow {
-// 			closeErr := i.Close()
-// 			if closeErr != nil {
-// 				i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 			}
-// 			return
-// 		}
-//
-// 		var (
-// 			version  int64
-// 			sequence int
-// 			nodeBz   gosqlite.RawBytes
-// 		)
-//
-// 		if err = i.itrStmt.Scan(&version, &sequence, &nodeBz); err != nil {
-// 			closeErr := i.Close()
-// 			if closeErr != nil {
-// 				i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 			}
-// 			return
-// 		}
-//
-// 		nodeKey := NewNodeKey(version, uint32(sequence))
-// 		node, err := Decode(i.sql.pool, nodeKey, nodeBz)
-// 		if err != nil {
-// 			closeErr := i.Close()
-// 			if closeErr != nil {
-// 				i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 			}
-// 			return
-// 		}
-//
-// 		if node.subtreeHeight != 1 {
-// 			continue
-// 		}
-//
-// 		node.leftNode, err = i.sql.getLeaf(node.leftNodeKey)
-// 		if err != nil {
-// 			closeErr := i.Close()
-// 			if closeErr != nil {
-// 				i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 			}
-// 			return
-// 		}
-//
-// 		node.rightNode, err = i.sql.getLeaf(node.rightNodeKey)
-// 		if err != nil {
-// 			closeErr := i.Close()
-// 			if closeErr != nil {
-// 				i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
-// 			}
-// 			return
-// 		}
-//
-// 		oldHash := slices.Clone(node.hash)
-// 		node.hash = nil
-// 		node._hash()
-//
-// 		if !bytes.Equal(node.hash, oldHash) {
-// 			i.key = node.leftNode.key
-//
-// 			b := make([]byte, 8)
-// 			binary.BigEndian.PutUint64(b, uint64(node.Version()))
-// 			i.value = b
-//
-// 			break
-// 		}
-// 	}
-// }
-//
-// func (i *WrongBranchHashIterator) Key() (key []byte) {
-// 	return i.key
-// }
-//
-// func (i *WrongBranchHashIterator) Value() (key []byte) {
-// 	return i.value
-// }
-//
-// func (i *WrongBranchHashIterator) Error() error {
-// 	return i.err
-// }
-//
-// func (i *WrongBranchHashIterator) Close() error {
-// 	if i.valid {
-// 		if i.metrics != nil {
-// 			i.metrics.IncrCounter(1, "iavl2", "iterator", "close")
-// 		}
-// 		i.valid = false
-//
-// 		return i.itrStmt.Close()
-// 	}
-// 	return nil
-// }
+type KVIterator struct {
+	sql       *sqlite.SqliteDb
+	itrStmt   *gosqlite.Stmt
+	start     []byte
+	end       []byte
+	valid     bool
+	err       error
+	key       []byte
+	value     []byte
+	metrics   metrics.Proxy
+	itrIdx    int
+	ascending bool
+	inclusive bool
+}
+
+func (i *KVIterator) Domain() (start []byte, end []byte) {
+	return i.start, i.end
+}
+
+func (i *KVIterator) Valid() bool {
+	return i.valid
+}
+
+func (i *KVIterator) Next() {
+	if i.metrics != nil {
+		defer i.metrics.MeasureSince(time.Now(), "iavl2", "kv iterator", "next")
+	}
+	if !i.valid {
+		return
+	}
+
+	hasRow, err := i.itrStmt.Step()
+	if err != nil {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+	if !hasRow {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+
+	var nodeBz gosqlite.RawBytes
+	if err = i.itrStmt.Scan(&i.key, &nodeBz); err != nil {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+
+	i.value, err = inode.DecodeValueOnly(nodeBz)
+	if err != nil {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+}
+
+func (i *KVIterator) Key() (key []byte) {
+	return i.key
+}
+
+func (i *KVIterator) Value() (value []byte) {
+	return i.value
+}
+
+func (i *KVIterator) Error() error {
+	return i.err
+}
+
+func (i *KVIterator) Close() error {
+	if i.valid {
+		if i.metrics != nil {
+			i.metrics.IncrCounter(1, "iavl2", "iterator", "close")
+		}
+		i.valid = false
+		return i.sql.ReadPool().CloseKVIterstor(i.itrIdx)
+	}
+	return nil
+}
+
+func (tree *Tree) IteratorVersionDescLeaves(version int64, limit int) (Iterator, error) {
+	if tree.db.Type() != db.SQLITE {
+		return nil, fmt.Errorf("IteratorVersionDescLeaves only support SQLITE")
+	}
+	pool := nodepool.NewNodePool()
+	db := tree.db.Readonly(pool)
+	sql := db.(*sqlite.SqliteDb)
+
+	var err error
+	kvItr := &KVIterator{
+		sql:     sql,
+		valid:   true,
+		metrics: tree.metricsProxy,
+	}
+
+	kvItr.itrStmt, kvItr.itrIdx, err = sql.ReadPool().GetVersionDescLeafIterator(version, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	if tree.metricsProxy != nil {
+		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
+	}
+
+	kvItr.Next()
+
+	return kvItr, err
+
+}

@@ -19,7 +19,7 @@ func (sql *SqliteDb) GetRightNode(node *inode.Node) (*inode.Node, error) {
 	)
 
 	if constants.IsLeafSeq(node.RightNodeKey().Sequence()) {
-		rightNode, err = sql.getLeaf(node.RightNodeKey())
+		rightNode, err = sql.GetLeaf(node.RightNodeKey())
 	} else {
 		rightNode, err = sql.getNode(node.RightNodeKey())
 	}
@@ -42,7 +42,7 @@ func (sql *SqliteDb) GetLeftNode(node *inode.Node) (*inode.Node, error) {
 	)
 
 	if constants.IsLeafSeq(node.LeftNodeKey().Sequence()) {
-		leftNode, err = sql.getLeaf(node.LeftNodeKey())
+		leftNode, err = sql.GetLeaf(node.LeftNodeKey())
 	} else {
 		leftNode, err = sql.getNode(node.LeftNodeKey())
 	}

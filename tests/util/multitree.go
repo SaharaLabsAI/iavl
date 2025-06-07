@@ -273,28 +273,28 @@ func (mt *MultiTree) Close() error {
 	return nil
 }
 
-// func (mt *MultiTree) WarmLeaves() error {
-// 	var cnt int
-// 	for _, tree := range mt.Trees {
-// 		cnt++
-// 		go func(t *itree.Tree) {
-// 			if err := t.db.WarmLeaves(); err != nil {
-// 				mt.errorCh <- err
-// 			} else {
-// 				mt.doneCh <- saveVersionResult{}
-// 			}
-// 		}(tree)
-// 	}
-// 	for i := 0; i < cnt; i++ {
-// 		select {
-// 		case err := <-mt.errorCh:
-// 			mt.logger.Error("failed to warm leaves", "error", err)
-// 			return err
-// 		case <-mt.doneCh:
-// 		}
-// 	}
-// 	return nil
-// }
+func (mt *MultiTree) WarmLeaves() error {
+	var cnt int
+	for _, tree := range mt.Trees {
+		cnt++
+		go func(t *itree.Tree) {
+			if err := t.WarmLeaves(); err != nil {
+				mt.errorCh <- err
+			} else {
+				mt.doneCh <- saveVersionResult{}
+			}
+		}(tree)
+	}
+	for i := 0; i < cnt; i++ {
+		select {
+		case err := <-mt.errorCh:
+			mt.logger.Error("failed to warm leaves", "error", err)
+			return err
+		case <-mt.doneCh:
+		}
+	}
+	return nil
+}
 
 func (mt *MultiTree) QueryReport(bins int) error {
 	m := metrics.NewStructMetrics()

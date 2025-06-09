@@ -103,7 +103,7 @@ func (sql *SqliteDb) Readonly(nodepool *nodepool.NodePool) db.ReadonlyDB {
 		readPool:    sql.readPool,
 		metrics:     sql.metrics,
 		logger:      sql.logger,
-		useReadPool: sql.useReadPool,
+		useReadPool: true,
 	}
 }
 
@@ -131,9 +131,13 @@ func (sql *SqliteDb) SetInitTreeVersion(version *atomic.Int64) {
 	sql.readPool.LinkTreeVersion(version)
 }
 
-// FIXME: read pool or readonly db for immutable tree
 func (sql *SqliteDb) GetVersioned(key []byte, version int64) ([]byte, error) {
-	return sql.read.getVersioned(version, key)
+	conn, err := sql.getReadConn()
+	if err != nil {
+		return nil, err
+	}
+
+	return conn.getVersioned(version, key)
 }
 
 func (sql *SqliteDb) LatestVersion() (int64, error) {

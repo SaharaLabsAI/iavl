@@ -60,10 +60,15 @@ func (sql *SqliteDb) FinishImport() error {
 }
 
 func (sql *SqliteDb) WriteBatch(importedNodes *db.DirtyNodes) error {
+	size := len(importedNodes.Leaves) + len(importedNodes.Branches)
+	if size == 0 {
+		size = defaultWriteBatchSize
+	}
+
 	batch := WriteBatch{
 		updates: importedNodes,
 		sql:     sql.writeDb,
-		size:    int64(len(importedNodes.Leaves)) + int64(len(importedNodes.Branches)),
+		size:    int64(size),
 		logger:  sql.logger,
 		metrics: sql.metrics,
 	}

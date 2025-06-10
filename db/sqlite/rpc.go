@@ -3,10 +3,12 @@ package sqlite
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/eatonphil/gosqlite"
 	"lukechampine.com/blake3"
 
+	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/logger"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	inode "github.com/cosmos/iavl/v2/node"
@@ -24,7 +26,7 @@ type SqliteReadConn struct {
 
 	opts *Options
 
-	inUse  bool
+	inUse  atomic.Bool
 	logger logger.Logger
 
 	mu sync.RWMutex
@@ -35,7 +37,6 @@ func NewSqliteReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger)
 		conn:        conn,
 		treeVersion: 0,
 		opts:        opts,
-		inUse:       false,
 		logger:      logger,
 	}
 }
@@ -44,7 +45,6 @@ func NewSqliteImmutableReadConn(treeVersion int64, opts *Options, logger logger.
 	return &SqliteReadConn{
 		treeVersion: treeVersion,
 		opts:        opts,
-		inUse:       false,
 		logger:      logger,
 	}
 }
@@ -168,7 +168,58 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 	return inode.DecodeValueOnly(nodeBz)
 }
 
-func (c *SqliteReadConn) GetLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
+func (c *SqliteReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
+	if constants.IsLeafSeq(nodekey.Sequence()) {
+		return c.getLeaf(pool, nodekey)
+	}
+
+	return c.getNode(pool, nodekey)
+}
+
+func (c *SqliteReadConn) IsInUse() bool {
+	return c.inUse.Load()
+}
+
+func (c *SqliteReadConn) MarkInUse() {
+	c.inUse.Store(true)
+}
+
+func (c *SqliteReadConn) MarkIdle() {
+	c.inUse.Store(false)
+}
+
+func (c *SqliteReadConn) Release() error {
+	c.MarkIdle()
+
+	return nil
+}
+
+func (c *SqliteReadConn) Close() error {
+	if c.queryLeaf != nil {
+		if err := c.queryLeaf.Close(); err != nil {
+			return err
+		}
+		c.queryLeaf = nil
+	}
+
+	if c.queryKV != nil {
+		if err := c.queryKV.Close(); err != nil {
+			return err
+		}
+		c.queryKV = nil
+	}
+
+	if c.queryBranch != nil {
+		if err := c.queryBranch.Close(); err != nil {
+			return err
+		}
+		c.queryBranch = nil
+	}
+
+	return c.conn.Close()
+}
+
+func (c *SqliteReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	defer c.MarkIdle()
 
 	var err error
@@ -206,7 +257,7 @@ func (c *SqliteReadConn) GetLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey)
 	return node, nil
 }
 
-func (c *SqliteReadConn) GetNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
+func (c *SqliteReadConn) getNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	defer c.MarkIdle()
 
 	var err error
@@ -245,50 +296,4 @@ func (c *SqliteReadConn) GetNode(pool *nodepool.NodePool, nodeKey inode.NodeKey)
 	}
 
 	return node, nil
-}
-
-func (c *SqliteReadConn) IsInUse() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.inUse
-}
-
-func (c *SqliteReadConn) MarkInUse() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.inUse = true
-}
-
-func (c *SqliteReadConn) MarkIdle() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.inUse = false
-}
-
-func (c *SqliteReadConn) Close() error {
-	if c.queryLeaf != nil {
-		if err := c.queryLeaf.Close(); err != nil {
-			return err
-		}
-		c.queryLeaf = nil
-	}
-
-	if c.queryKV != nil {
-		if err := c.queryKV.Close(); err != nil {
-			return err
-		}
-		c.queryKV = nil
-	}
-
-	if c.queryBranch != nil {
-		if err := c.queryBranch.Close(); err != nil {
-			return err
-		}
-		c.queryBranch = nil
-	}
-
-	return c.conn.Close()
 }

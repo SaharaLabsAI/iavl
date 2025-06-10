@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +38,8 @@ type SqliteDb struct {
 	logger  logger.Logger
 
 	useReadPool bool
+
+	rw sync.RWMutex
 }
 
 func NewInMemorySqliteDb() (*SqliteDb, error) {
@@ -321,12 +324,14 @@ func (sql *SqliteDb) newHashConnection() (*SqliteReadConn, error) {
 		conn:        conn,
 		treeVersion: 0,
 		opts:        &sql.opts,
-		inUse:       false,
 		logger:      sql.logger,
 	}, nil
 }
 
-func (sql *SqliteDb) GetHashConn() (db.HashConn, error) {
+func (sql *SqliteDb) GetReadConn() (db.ReadConn, error) {
+	sql.rw.Lock()
+	defer sql.rw.Unlock()
+
 	for _, conn := range sql.hashPool {
 		if conn.IsInUse() {
 			continue
@@ -347,13 +352,6 @@ func (sql *SqliteDb) GetHashConn() (db.HashConn, error) {
 	return conn, nil
 }
 
-func (sql *SqliteDb) ReturnHashConns(conns []db.HashConn) {
-	for _, conn := range conns {
-		conn := conn.(*SqliteReadConn)
-		conn.MarkIdle()
-	}
-}
-
 func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
 	// Fallback to old method for backward compatibility
 	start := time.Now()
@@ -370,10 +368,6 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
-	}
-
-	if constants.IsLeafSeq(nodekey.Sequence()) {
-		return conn.GetLeaf(nodePool, nodekey)
 	}
 
 	return conn.GetNode(nodePool, nodekey)

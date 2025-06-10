@@ -9,7 +9,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/pool"
 	hashpool "github.com/cosmos/iavl/v2/common/pool/hash"
 	"github.com/cosmos/iavl/v2/db"
@@ -181,18 +180,26 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 		actualConnections := min(maxConnections, tree.optimizedWorkerCount(len(nodesToLoad)))
 		actualConnections = max(1, actualConnections) // Ensure at least 1
 
-		connPool := make([]db.HashConn, 0, actualConnections)
+		connPool := make([]db.ReadConn, 0, actualConnections)
 		defer func() {
-			tree.db.ReturnHashConns(connPool)
+			for _, conn := range connPool {
+				if err := conn.Release(); err != nil {
+					panic(err)
+				}
+			}
 		}()
 
 		// Create connections - always try parallel, fallback on error
 		parallelLoadSuccessful := false
 		if actualConnections > 1 {
 			for i := 0; i < actualConnections; i++ {
-				conn, err := tree.db.GetHashConn()
+				conn, err := tree.db.GetReadConn()
 				if err != nil {
-					tree.db.ReturnHashConns(connPool)
+					for _, conn := range connPool {
+						if err := conn.Release(); err != nil {
+							panic(err)
+						}
+					}
 					connPool = connPool[:0]
 					break
 				}
@@ -438,7 +445,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 }
 
 // loadNodesParallel loads nodes in parallel using multiple database connections
-func (tree *Tree) loadNodesParallel(tasks []nodeLoadTask, connPool []db.HashConn) {
+func (tree *Tree) loadNodesParallel(tasks []nodeLoadTask, connPool []db.ReadConn) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -469,15 +476,8 @@ func (tree *Tree) loadNodesParallel(tasks []nodeLoadTask, connPool []db.HashConn
 			conn := connPool[connIdx]
 
 			for task := range taskChan {
-				var loadedNode *inode.Node
-				var err error
-
 				// Load node from database using the dedicated connection
-				if constants.IsLeafSeq(task.nodeKey.Sequence()) {
-					loadedNode, err = conn.GetLeaf(tree.nodePool, task.nodeKey)
-				} else {
-					loadedNode, err = conn.GetNode(tree.nodePool, task.nodeKey)
-				}
+				loadedNode, err := conn.GetNode(tree.nodePool, task.nodeKey)
 
 				resultChan <- loadResult{
 					task: task,

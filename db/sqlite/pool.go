@@ -175,7 +175,7 @@ func (c *ConnPool) getConn(version int64) (*SqliteReadConn, error) {
 
 	for _, conn := range c.conns {
 		if !conn.IsInUse() {
-			conn.inUse = true
+			conn.MarkInUse()
 			conn.ResetToTreeVersion(version)
 			return conn, nil
 		}
@@ -186,7 +186,7 @@ func (c *ConnPool) getConn(version int64) (*SqliteReadConn, error) {
 	}
 
 	conn := NewSqliteImmutableReadConn(version, c.opts, c.logger)
-	conn.inUse = true
+	conn.MarkInUse()
 	conn.ResetToTreeVersion(conn.treeVersion + 1) // Force reset on first connect
 	c.conns = append(c.conns, conn)
 

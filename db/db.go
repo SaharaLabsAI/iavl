@@ -32,25 +32,20 @@ type ReadonlyDB interface {
 	Close() error
 }
 
-type HashConn interface {
-	GetLeaf(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
+type ReadConn interface {
 	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
-}
-
-type HashConnPool interface {
-	GetHashConn() (HashConn, error)
-	ReturnHashConns([]HashConn)
+	Release() error
 }
 
 type Read interface {
 	Path() string
-	HashConnPool
 	ResetRead() error
 	Get(key []byte, version int64) ([]byte, error)
+	GetReadConn() (ReadConn, error)
 	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
-	LatestVersion() (int64, error)
 	HasRoot(version int64) (bool, error)
 	LoadRoot(pool *nodepool.NodePool, version int64) (*inode.Node, error)
+	LatestVersion() (int64, error)
 	SetInitTreeVersion(version *atomic.Int64)
 }
 

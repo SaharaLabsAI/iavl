@@ -114,7 +114,11 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 		return sql.writeDb.SaveRoot(version, root)
 	}
 
-	return sql.writeEv.SaveTree(root, version, updates)
+	if err := sql.writeEv.SaveTree(root, version, updates); err != nil {
+		return err
+	}
+
+	return sql.resetReadConn()
 }
 
 func (sql *SqliteDb) ReadPool() *SqliteReadonlyConnPool {

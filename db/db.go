@@ -35,7 +35,6 @@ type ReadConn interface {
 
 type Read interface {
 	Path() string
-	ResetRead() error
 	Get(key []byte, version int64) ([]byte, error)
 	GetReadConn() (ReadConn, error)
 	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)

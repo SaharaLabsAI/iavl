@@ -109,10 +109,6 @@ func (tree *Tree) SaveVersion() ([]byte, int64, error) {
 		}
 	}
 
-	if err := tree.db.ResetRead(); err != nil {
-		return nil, savedTreeVersion, err
-	}
-
 	tree.resetSequences()
 	tree.dirtyNodes.Reset()
 	tree.deleted = make(map[string]bool)

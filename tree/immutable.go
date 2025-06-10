@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	ics23 "github.com/cosmos/ics23/go"
+
 	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
@@ -42,9 +44,24 @@ func (tree *Tree) GetImmutable(version int64) (*ImmutableTree, error) {
 }
 
 func (tree *ImmutableTree) Close() error {
-	tree.nodePool = nil
+	if tree.db == nil {
+		return nil
+	}
 
 	return tree.db.Close()
+}
+
+func (tree *ImmutableTree) Version() int64 {
+	return tree.version
+}
+
+func (tree *ImmutableTree) VersionExists(version int64) (bool, error) {
+	exists, err := tree.db.HasRoot(version)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
 
 func (tree *ImmutableTree) LoadVersion(version int64) (err error) {
@@ -107,6 +124,10 @@ func (tree *ImmutableTree) GetByIndex(index int64) (key []byte, value []byte, er
 	}
 
 	return tree.getByIndex(tree.root, index)
+}
+
+func (tree *ImmutableTree) GetProof(key []byte) (proof *ics23.CommitmentProof, err error) {
+	return tree.getProof(key)
 }
 
 func (tree *ImmutableTree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
@@ -233,4 +254,56 @@ func (tree *ImmutableTree) returnNode(node *inode.Node) {
 
 	// Return node to the pool for reuse
 	tree.nodePool.Put(node)
+}
+
+func (tree *ImmutableTree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err error) {
+	itr = &LeafIterator{
+		tree:      tree,
+		start:     start,
+		end:       end,
+		ascending: true,
+		inclusive: inclusive,
+		valid:     tree.root != nil,
+		stack:     nil, // Will be initialized properly below
+		metrics:   tree.metrics,
+	}
+
+	treeItr := itr.(*LeafIterator)
+	treeItr.initializeIteratorStack(tree.root)
+
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
+	}
+
+	if tree.root != nil {
+		itr.Next()
+	}
+
+	return itr, err
+}
+
+func (tree *ImmutableTree) ReverseIterator(start, end []byte) (itr Iterator, err error) {
+	itr = &LeafIterator{
+		tree:      tree,
+		start:     start,
+		end:       end,
+		ascending: false,
+		inclusive: false,
+		valid:     tree.root != nil,
+		stack:     nil, // Will be initialized properly below
+		metrics:   tree.metrics,
+	}
+
+	treeItr := itr.(*LeafIterator)
+	treeItr.initializeIteratorStack(tree.root)
+
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
+	}
+
+	if tree.root != nil {
+		itr.Next()
+	}
+
+	return itr, nil
 }

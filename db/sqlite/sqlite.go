@@ -374,6 +374,11 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 }
 
 func (sql *SqliteDb) Close() error {
+	if sql.writeDb == nil {
+		// Readonly DB, nothing to close
+		return nil
+	}
+
 	if sql.writeDb != nil {
 		if err := sql.writeDb.Close(); err != nil {
 			return err

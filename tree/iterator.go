@@ -389,7 +389,7 @@ func (i *LeafIterator) initializeIteratorStack(root *inode.Node) {
 
 func newIterTree(tree *Tree) *Tree {
 	pool := nodepool.NewNodePool()
-	db := tree.db.Readonly(pool)
+	db := tree.db.Readonly()
 
 	itTree := &Tree{
 		db:             db,
@@ -600,8 +600,7 @@ func (tree *Tree) IteratorVersionDescLeaves(version int64, limit int) (Iterator,
 	if tree.db.Type() != db.SQLITE {
 		return nil, fmt.Errorf("IteratorVersionDescLeaves only support SQLITE")
 	}
-	pool := nodepool.NewNodePool()
-	db := tree.db.Readonly(pool)
+	db := tree.db.Readonly()
 	sql := db.(*sqlite.SqliteDb)
 
 	var err error

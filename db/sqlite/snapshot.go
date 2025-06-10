@@ -329,7 +329,7 @@ type SnapshotNode struct {
 	Height  int8
 }
 
-func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder constants.TraverseOrderType, loadLeaves bool) (*inode.Node, error) {
+func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder constants.TraverseOrderType, loadLeaves bool, nodePool *nodepool.NodePool) (*inode.Node, error) {
 	read, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
@@ -354,7 +354,7 @@ func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder consta
 
 	imp := &sqliteImport{
 		query:      q,
-		pool:       sql.nodePool,
+		pool:       nodePool,
 		loadLeaves: loadLeaves,
 		since:      time.Now(),
 		log:        sql.logger,
@@ -384,7 +384,7 @@ func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder consta
 	return root, nil
 }
 
-func (sql *SqliteDb) ImportMostRecentSnapshot(targetVersion int64, traverseOrder constants.TraverseOrderType, loadLeaves bool) (*inode.Node, int64, error) {
+func (sql *SqliteDb) ImportMostRecentSnapshot(targetVersion int64, traverseOrder constants.TraverseOrderType, loadLeaves bool, nodePool *nodepool.NodePool) (*inode.Node, int64, error) {
 	read, err := sql.getReadConn()
 	if err != nil {
 		return nil, 0, err
@@ -429,7 +429,7 @@ func (sql *SqliteDb) ImportMostRecentSnapshot(targetVersion int64, traverseOrder
 		}
 	}
 
-	root, err := sql.ImportSnapshotFromTable(version, traverseOrder, loadLeaves)
+	root, err := sql.ImportSnapshotFromTable(version, traverseOrder, loadLeaves, nodePool)
 	if err != nil {
 		return nil, 0, err
 	}

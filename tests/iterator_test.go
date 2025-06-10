@@ -12,7 +12,7 @@ import (
 
 func Test_Iterator(t *testing.T) {
 	pool := nodepool.NewNodePool()
-	sql, err := sqlite.NewInMemorySqliteDb(pool)
+	sql, err := sqlite.NewInMemorySqliteDb()
 	require.NoError(t, err)
 
 	opts := itree.DefaultOptions()
@@ -226,7 +226,7 @@ func Test_Iterator(t *testing.T) {
 func Test_IteratorTree(t *testing.T) {
 	tmpDir := t.TempDir()
 	pool := nodepool.NewNodePool()
-	sql, err := sqlite.NewSqliteDb(pool, sqlite.Options{Path: tmpDir})
+	sql, err := sqlite.NewSqliteDb(sqlite.Options{Path: tmpDir})
 	require.NoError(t, err)
 
 	opts := itree.DefaultOptions()
@@ -309,4 +309,3 @@ func Test_IteratorTree(t *testing.T) {
 		})
 	}
 }
-

@@ -19,7 +19,7 @@ func (tree *Tree) LoadSnapshot(version int64, traverseOrder constants.TraverseOr
 	defer tree.rw.Unlock()
 
 	var v int64
-	tree.root, v, err = sql.ImportMostRecentSnapshot(version, traverseOrder, true)
+	tree.root, v, err = sql.ImportMostRecentSnapshot(version, traverseOrder, true, tree.nodePool)
 	if err != nil {
 		return err
 	}

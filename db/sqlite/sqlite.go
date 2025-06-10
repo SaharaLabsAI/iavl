@@ -26,8 +26,6 @@ type SqliteDb struct {
 	writeEv     *WriteEventLoop
 	writeCancel context.CancelFunc
 
-	nodePool *nodepool.NodePool
-
 	// Used by block producer or syncer
 	read *SqliteReadConn
 
@@ -41,18 +39,17 @@ type SqliteDb struct {
 	useReadPool bool
 }
 
-func NewInMemorySqliteDb(pool *nodepool.NodePool) (*SqliteDb, error) {
+func NewInMemorySqliteDb() (*SqliteDb, error) {
 	opts := defaultOptions(Options{ConnArgs: "mode=memory&cache=shared"})
-	return NewSqliteDb(pool, opts)
+	return NewSqliteDb(opts)
 }
 
-func NewSqliteDb(pool *nodepool.NodePool, opts Options) (*SqliteDb, error) {
+func NewSqliteDb(opts Options) (*SqliteDb, error) {
 	var err error
 	opts = defaultOptions(opts)
 
 	sql := &SqliteDb{
 		opts:        opts,
-		nodePool:    pool,
 		metrics:     opts.Metrics,
 		logger:      opts.Logger,
 		useReadPool: false,
@@ -96,10 +93,9 @@ func NewSqliteDb(pool *nodepool.NodePool, opts Options) (*SqliteDb, error) {
 	return sql, nil
 }
 
-func (sql *SqliteDb) Readonly(nodepool *nodepool.NodePool) db.ReadonlyDB {
+func (sql *SqliteDb) Readonly() db.ReadonlyDB {
 	return &SqliteDb{
 		opts:        sql.opts,
-		nodePool:    nodepool,
 		readPool:    sql.readPool,
 		metrics:     sql.metrics,
 		logger:      sql.logger,
@@ -364,7 +360,7 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 	defer func() {
 		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get_node")
 
-		target := "db_get_node"
+		target := "db_get_branch"
 		if constants.IsLeafSeq(nodekey.Sequence()) {
 			target = "db_get_leaf"
 		}
@@ -381,37 +377,6 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 	}
 
 	return conn.GetNode(nodePool, nodekey)
-}
-
-func (sql *SqliteDb) GetLeaf(nodeKey inode.NodeKey) (*inode.Node, error) {
-	// Fallback to old method for backward compatibility
-	start := time.Now()
-	defer func() {
-		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get")
-		sql.metrics.IncrCounter(1, constants.MetricsNamespace, "db_get_leaf")
-	}()
-
-	conn, err := sql.getReadConn()
-	if err != nil {
-		return nil, err
-	}
-
-	return conn.GetLeaf(sql.nodePool, nodeKey)
-}
-
-func (sql *SqliteDb) getNode(nodeKey inode.NodeKey) (*inode.Node, error) {
-	start := time.Now()
-	defer func() {
-		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get")
-		sql.metrics.IncrCounter(1, constants.MetricsNamespace, "db_get_branch")
-	}()
-
-	conn, err := sql.getReadConn()
-	if err != nil {
-		return nil, err
-	}
-
-	return conn.GetNode(sql.nodePool, nodeKey)
 }
 
 func (sql *SqliteDb) Close() error {
@@ -450,14 +415,10 @@ func (sql *SqliteDb) Close() error {
 		}
 	}
 
-	if sql.nodePool != nil {
-		sql.nodePool = nil
-	}
-
 	return nil
 }
 
-func (sql *SqliteDb) LoadRoot(version int64) (*inode.Node, error) {
+func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inode.Node, error) {
 	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return nil, err
@@ -491,7 +452,7 @@ func (sql *SqliteDb) LoadRoot(version int64) (*inode.Node, error) {
 	var root *inode.Node
 	if nodeBz != nil {
 		rootKey := inode.NewNodeKey(nodeVersion, uint32(nodeSeq))
-		root, err = inode.Decode(sql.nodePool, rootKey, nodeBz)
+		root, err = inode.Decode(nodePool, rootKey, nodeBz)
 		if err != nil {
 			return nil, err
 		}

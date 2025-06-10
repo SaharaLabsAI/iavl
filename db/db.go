@@ -15,7 +15,7 @@ const (
 
 type DB interface {
 	Type() Type
-	Readonly(node *nodepool.NodePool) ReadonlyDB
+	Readonly() ReadonlyDB
 	Import
 	Read
 	Write
@@ -25,7 +25,7 @@ type DB interface {
 // FIXME: later
 type ReadonlyDB interface {
 	Type() Type
-	Readonly(node *nodepool.NodePool) ReadonlyDB
+	Readonly() ReadonlyDB
 	Import
 	Read
 	Write
@@ -50,7 +50,7 @@ type Read interface {
 	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
 	LatestVersion() (int64, error)
 	HasRoot(version int64) (bool, error)
-	LoadRoot(version int64) (*inode.Node, error)
+	LoadRoot(pool *nodepool.NodePool, version int64) (*inode.Node, error)
 	SetInitTreeVersion(version *atomic.Int64)
 }
 

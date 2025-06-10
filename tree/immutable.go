@@ -8,7 +8,7 @@ import (
 func (tree *Tree) GetImmutable(version int64) (*Tree, error) {
 	// We can discard whole pool after usage
 	pool := nodepool.NewNodePool()
-	db := tree.db.Readonly(pool)
+	db := tree.db.Readonly()
 
 	imTree := &Tree{
 		db:             db,
@@ -35,7 +35,7 @@ func (tree *Tree) GetImmutable(version int64) (*Tree, error) {
 func (tree *Tree) GetImmutableProvable(version int64) (*Tree, error) {
 	// We can discard whole pool after usage
 	pool := nodepool.NewNodePool()
-	db := tree.db.Readonly(pool)
+	db := tree.db.Readonly()
 
 	imTree := &Tree{
 		db:             db,

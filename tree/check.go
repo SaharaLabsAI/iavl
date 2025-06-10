@@ -54,7 +54,7 @@ func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
 	}
 
 	pool := nodepool.NewNodePool()
-	db := tree.db.Readonly(pool)
+	db := tree.db.Readonly()
 	sql := db.(*sqlite.SqliteDb)
 
 	itr := &WrongBranchHashIterator{
@@ -162,7 +162,7 @@ func (i *WrongBranchHashIterator) Next() {
 			continue
 		}
 
-		leftNode, err := i.sql.GetLeaf(node.LeftNodeKey())
+		leftNode, err := i.sql.GetNode(i.nodePool, node.LeftNodeKey())
 		if err != nil {
 			closeErr := i.Close()
 			if closeErr != nil {
@@ -172,7 +172,7 @@ func (i *WrongBranchHashIterator) Next() {
 		}
 		node.SetLeft(leftNode)
 
-		rightNode, err := i.sql.GetLeaf(node.RightNodeKey())
+		rightNode, err := i.sql.GetNode(i.nodePool, node.RightNodeKey())
 		if err != nil {
 			closeErr := i.Close()
 			if closeErr != nil {

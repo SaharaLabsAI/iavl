@@ -46,7 +46,7 @@ func (tree *Tree) LoadVersion(version int64) (err error) {
 	tree.workingBytes = 0
 	tree.workingSize = 0
 
-	tree.root, err = tree.db.LoadRoot(version)
+	tree.root, err = tree.db.LoadRoot(tree.nodePool, version)
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ import (
 type SqliteReadonlyConnPool struct {
 	opts *Options
 
-	treeVersion *atomic.Int64
+	treeVersion atomic.Int64
 	savingTree  atomic.Bool
 
 	conns *ConnPool
@@ -46,8 +46,8 @@ func NewSqliteReadonlyConnPool(opts *Options, MaxPoolSize int) (*SqliteReadonlyC
 	return pool, nil
 }
 
-func (pool *SqliteReadonlyConnPool) LinkTreeVersion(version *atomic.Int64) {
-	pool.treeVersion = version
+func (pool *SqliteReadonlyConnPool) SetTreeVersion(version int64) {
+	pool.treeVersion.Store(version)
 }
 
 func (pool *SqliteReadonlyConnPool) SetSavingTree() {

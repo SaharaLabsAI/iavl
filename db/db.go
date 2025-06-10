@@ -1,8 +1,6 @@
 package db
 
 import (
-	"sync/atomic"
-
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	inode "github.com/cosmos/iavl/v2/node"
 )
@@ -41,7 +39,6 @@ type Read interface {
 	HasRoot(version int64) (bool, error)
 	LoadRoot(pool *nodepool.NodePool, version int64) (*inode.Node, error)
 	LatestVersion() (int64, error)
-	SetInitTreeVersion(version *atomic.Int64)
 }
 
 type Write interface {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -118,16 +117,13 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 		return err
 	}
 
+	sql.readPool.SetTreeVersion(version)
+
 	return sql.resetReadConn()
 }
 
 func (sql *SqliteDb) ReadPool() *SqliteReadonlyConnPool {
 	return sql.readPool
-}
-
-// TODO: Remove
-func (sql *SqliteDb) SetInitTreeVersion(version *atomic.Int64) {
-	sql.readPool.LinkTreeVersion(version)
 }
 
 func (sql *SqliteDb) Get(key []byte, version int64) ([]byte, error) {

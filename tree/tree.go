@@ -59,9 +59,6 @@ func NewTree(db idb.DB, pool *nodepool.NodePool, opts Options) *Tree {
 	}
 
 	tree.version.Store(0)
-	if tree.db != nil {
-		tree.db.SetInitTreeVersion(&tree.version)
-	}
 
 	return tree
 }

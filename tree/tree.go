@@ -33,7 +33,6 @@ type Tree struct {
 	branchSequence uint32
 	isReplaying    bool
 
-	immutable         bool
 	hashedVersion     int64
 	modificationCount int64
 	cache             map[string][]byte
@@ -52,7 +51,6 @@ func NewTree(db idb.DB, pool *nodepool.NodePool, opts Options) *Tree {
 		heightFilter:   opts.HeightFilter,
 		metricsProxy:   opts.MetricsProxy,
 		leafSequence:   constants.LeafSequenceStart,
-		immutable:      false,
 		hashedVersion:  -1,
 		cache:          make(map[string][]byte),
 		deleted:        make(map[string]bool),

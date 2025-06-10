@@ -12,10 +12,6 @@ import (
 // Remove removes a key from the working tree. The given key byte slice should not be modified
 // after this call, since it may point to data stored inside IAVL.
 func (tree *Tree) Remove(key []byte) ([]byte, bool, error) {
-	if tree.immutable {
-		panic("Remove on immutable tree")
-	}
-
 	if tree.metricsProxy != nil {
 		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_remove")
 	}

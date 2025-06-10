@@ -36,10 +36,6 @@ func NewRemoveOperation(key []byte) BatchOperation {
 }
 
 func (tree *Tree) BatchSetRemove(operations []BatchOperation) error {
-	if tree.immutable {
-		panic("batch operations on immutable tree")
-	}
-
 	if len(operations) == 0 {
 		return nil
 	}

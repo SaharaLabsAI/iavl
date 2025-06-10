@@ -2,7 +2,6 @@ package tree
 
 import (
 	"errors"
-	"fmt"
 )
 
 func (tree *Tree) VersionExists(version int64) (bool, error) {
@@ -28,17 +27,6 @@ func (tree *Tree) LoadVersion(version int64) (err error) {
 	}
 
 	tree.version.Store(version)
-	if tree.immutable {
-		exists, err := tree.db.HasRoot(version)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			return fmt.Errorf("root not found for version %d", version)
-		}
-
-		return nil
-	}
 
 	tree.rw.Lock()
 	defer tree.rw.Unlock()
@@ -59,15 +47,9 @@ func (tree *Tree) LoadVersion(version int64) (err error) {
 }
 
 func (tree *Tree) SetInitialVersion(version int64) error {
-	if tree.immutable {
-		panic("set initial version on immutable tree")
-	}
-
-	var err error
-
 	tree.version.Store(version - 1)
 
-	return err
+	return nil
 }
 
 func (tree *Tree) SaveVersion() ([]byte, int64, error) {

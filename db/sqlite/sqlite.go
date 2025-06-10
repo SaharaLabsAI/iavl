@@ -37,8 +37,6 @@ type SqliteDb struct {
 	metrics metrics.Proxy
 	logger  logger.Logger
 
-	useReadPool bool
-
 	rw sync.RWMutex
 }
 
@@ -52,10 +50,9 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 	opts = defaultOptions(opts)
 
 	sql := &SqliteDb{
-		opts:        opts,
-		metrics:     opts.Metrics,
-		logger:      opts.Logger,
-		useReadPool: false,
+		opts:    opts,
+		metrics: opts.Metrics,
+		logger:  opts.Logger,
 	}
 
 	if !api.IsFileExistent(opts.Path) {
@@ -98,11 +95,10 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 
 func (sql *SqliteDb) Readonly() db.ReadonlyDB {
 	return &SqliteDb{
-		opts:        sql.opts,
-		readPool:    sql.readPool,
-		metrics:     sql.metrics,
-		logger:      sql.logger,
-		useReadPool: true,
+		opts:     sql.opts,
+		readPool: sql.readPool,
+		metrics:  sql.metrics,
+		logger:   sql.logger,
 	}
 }
 
@@ -268,8 +264,12 @@ func (sql *SqliteDb) resetReadConn() (err error) {
 	return err
 }
 
+func (sql *SqliteDb) isReadonlyDB() bool {
+	return sql.writeDb == nil
+}
+
 func (sql *SqliteDb) getReadConn() (*SqliteReadConn, error) {
-	if sql.useReadPool {
+	if sql.isReadonlyDB() {
 		return sql.readPool.GetConn()
 	}
 
@@ -374,7 +374,7 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 }
 
 func (sql *SqliteDb) Close() error {
-	if sql.writeDb == nil {
+	if sql.isReadonlyDB() {
 		// Readonly DB, nothing to close
 		return nil
 	}

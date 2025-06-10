@@ -46,9 +46,8 @@ type Read interface {
 	Path() string
 	HashConnPool
 	ResetRead() error
-	GetLeftNode(node *inode.Node) (*inode.Node, error)
-	GetRightNode(node *inode.Node) (*inode.Node, error)
-	GetVersioned(key []byte, version int64) ([]byte, error)
+	Get(key []byte, version int64) ([]byte, error)
+	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
 	LatestVersion() (int64, error)
 	HasRoot(version int64) (bool, error)
 	LoadRoot(version int64) (*inode.Node, error)

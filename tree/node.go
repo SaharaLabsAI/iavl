@@ -2,6 +2,7 @@ package tree
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/cosmos/iavl/v2/common/constants"
 	inode "github.com/cosmos/iavl/v2/node"
@@ -34,9 +35,10 @@ func (tree *Tree) getLeftNode(node *inode.Node) (*inode.Node, error) {
 		return node.LeftNode(), nil
 	}
 
-	leftNode, err := tree.db.GetLeftNode(node)
+	leftNode, err := tree.db.GetNode(tree.nodePool, node.LeftNodeKey())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get left node node_key=%s height=%d path=%s: %w",
+			node.LeftNodeKey(), node.SubTreeHeight(), tree.db.Path(), err)
 	}
 
 	node.SetLeft(leftNode)
@@ -53,9 +55,10 @@ func (tree *Tree) getRightNode(node *inode.Node) (*inode.Node, error) {
 		return node.RightNode(), nil
 	}
 
-	rightNode, err := tree.db.GetRightNode(node)
+	rightNode, err := tree.db.GetNode(tree.nodePool, node.RightNodeKey())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get right node node_key=%s height=%d path=%s: %w",
+			node.RightNodeKey(), node.SubTreeHeight(), tree.db.Path(), err)
 	}
 
 	node.SetRight(rightNode)

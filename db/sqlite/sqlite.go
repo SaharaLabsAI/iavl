@@ -131,7 +131,7 @@ func (sql *SqliteDb) SetInitTreeVersion(version *atomic.Int64) {
 	sql.readPool.LinkTreeVersion(version)
 }
 
-func (sql *SqliteDb) GetVersioned(key []byte, version int64) ([]byte, error) {
+func (sql *SqliteDb) Get(key []byte, version int64) ([]byte, error) {
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
@@ -356,6 +356,31 @@ func (sql *SqliteDb) ReturnHashConns(conns []db.HashConn) {
 		conn := conn.(*SqliteReadConn)
 		conn.MarkIdle()
 	}
+}
+
+func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
+	// Fallback to old method for backward compatibility
+	start := time.Now()
+	defer func() {
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get_node")
+
+		target := "db_get_node"
+		if constants.IsLeafSeq(nodekey.Sequence()) {
+			target = "db_get_leaf"
+		}
+		sql.metrics.IncrCounter(1, constants.MetricsNamespace, target)
+	}()
+
+	conn, err := sql.getReadConn()
+	if err != nil {
+		return nil, err
+	}
+
+	if constants.IsLeafSeq(nodekey.Sequence()) {
+		return conn.GetLeaf(nodePool, nodekey)
+	}
+
+	return conn.GetNode(nodePool, nodekey)
 }
 
 func (sql *SqliteDb) GetLeaf(nodeKey inode.NodeKey) (*inode.Node, error) {

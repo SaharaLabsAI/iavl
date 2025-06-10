@@ -16,7 +16,7 @@ type stackEntry struct {
 }
 
 func (tree *Tree) Export(order constants.TraverseOrderType) *Exporter {
-	imTree, err := tree.GetImmutableProvable(tree.version.Load())
+	imTree, err := tree.GetImmutable(tree.version.Load())
 	if err != nil {
 		panic(err)
 	}
@@ -27,7 +27,7 @@ func (tree *Tree) Export(order constants.TraverseOrderType) *Exporter {
 		errCh:   make(chan error),
 		count:   0,
 		startAt: time.Now(),
-		version: imTree.version.Load(),
+		version: imTree.version,
 	}
 
 	go func(traverseOrder constants.TraverseOrderType) {
@@ -51,7 +51,7 @@ func (tree *Tree) ExportVersion(version int64, order constants.TraverseOrderType
 		return tree.Export(order), nil
 	}
 
-	imTree, err := tree.GetImmutableProvable(version)
+	imTree, err := tree.GetImmutable(version)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (tree *Tree) ExportVersion(version int64, order constants.TraverseOrderType
 }
 
 type Exporter struct {
-	tree    *Tree
+	tree    *ImmutableTree
 	out     chan *inode.Node
 	errCh   chan error
 	count   int
@@ -283,5 +283,5 @@ func (e *Exporter) NextRawNode() (*inode.Node, error) {
 var ErrorExportDone = errors.New("export done")
 
 func (e *Exporter) Close() error {
-	return e.tree.DiscardImmutableTree()
+	return e.tree.Close()
 }

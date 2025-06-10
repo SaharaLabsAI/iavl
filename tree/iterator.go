@@ -7,7 +7,6 @@ import (
 
 	"github.com/eatonphil/gosqlite"
 
-	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	"github.com/cosmos/iavl/v2/db"
@@ -54,7 +53,7 @@ type iteratorStackEntry struct {
 }
 
 type LeafIterator struct {
-	tree       *Tree
+	tree       *ImmutableTree
 	start, end []byte // iteration domain
 	ascending  bool   // ascending traversal
 	inclusive  bool   // end key inclusiveness
@@ -387,22 +386,15 @@ func (i *LeafIterator) initializeIteratorStack(root *inode.Node) {
 	}
 }
 
-func newIterTree(tree *Tree) *Tree {
+func newIterTree(tree *Tree) *ImmutableTree {
 	pool := nodepool.NewNodePool()
 	db := tree.db.Readonly()
 
-	itTree := &Tree{
-		db:             db,
-		nodePool:       pool,
-		metrics:        tree.metrics,
-		maxWorkingSize: tree.maxWorkingSize,
-		heightFilter:   tree.heightFilter,
-		metricsProxy:   tree.metricsProxy,
-		leafSequence:   constants.LeafSequenceStart,
-		hashedVersion:  tree.version.Load(),
-		cache:          make(map[string][]byte),
-		deleted:        make(map[string]bool),
-		immutable:      true,
+	itTree := &ImmutableTree{
+		version:  tree.version.Load(),
+		db:       db,
+		nodePool: pool,
+		metrics:  tree.metrics,
 	}
 
 	if tree.root != nil {

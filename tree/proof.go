@@ -16,7 +16,7 @@ import (
 )
 
 func (tree *Tree) GetProof(version int64, key []byte) (proof *ics23.CommitmentProof, err error) {
-	t, err := tree.GetImmutableProvable(version)
+	t, err := tree.GetImmutable(version)
 	if err != nil {
 		return nil, err
 	}
@@ -24,15 +24,12 @@ func (tree *Tree) GetProof(version int64, key []byte) (proof *ics23.CommitmentPr
 	return t.getProof(key)
 }
 
-func (tree *Tree) getProof(key []byte) (proof *ics23.CommitmentProof, err error) {
+func (tree *ImmutableTree) getProof(key []byte) (proof *ics23.CommitmentProof, err error) {
 	if tree.root == nil {
 		return nil, errors.New("cannot get proof from empty tree")
 	}
 	if len(key) == 0 {
 		return nil, errors.New("cannot get proof for empty key")
-	}
-	if !tree.immutable {
-		return nil, errors.New("expected tree to be immutable")
 	}
 
 	exists, err := tree.Has(key)
@@ -53,7 +50,7 @@ func (tree *Tree) getProof(key []byte) (proof *ics23.CommitmentProof, err error)
 	return tree.getNonMembershipProof(key)
 }
 
-func (tree *Tree) getExistenceProof(key []byte) (proof *ics23.ExistenceProof, err error) {
+func (tree *ImmutableTree) getExistenceProof(key []byte) (proof *ics23.ExistenceProof, err error) {
 	tree.Hash()
 	path, node, err := tree.PathToLeaf(tree.root, key)
 	if err != nil {
@@ -71,7 +68,7 @@ func (tree *Tree) getExistenceProof(key []byte) (proof *ics23.ExistenceProof, er
 	}, err
 }
 
-func (tree *Tree) getNonMembershipProof(key []byte) (*ics23.CommitmentProof, error) {
+func (tree *ImmutableTree) getNonMembershipProof(key []byte) (*ics23.CommitmentProof, error) {
 	// idx is one node right of what we want....
 	var err error
 	idx, val, err := tree.GetWithIndex(key)
@@ -185,7 +182,7 @@ func convertVarIntToBytes(orig int64, buf [binary.MaxVarintLen64]byte) []byte {
 // If the key does not exist, returns the path to the next leaf left of key (w/
 // path), except when key is less than the least item, in which case it returns
 // a path to the least item.
-func (tree *Tree) PathToLeaf(node *inode.Node, key []byte) (PathToLeaf, *inode.Node, error) {
+func (tree *ImmutableTree) PathToLeaf(node *inode.Node, key []byte) (PathToLeaf, *inode.Node, error) {
 	path := new(PathToLeaf)
 	val, err := tree.pathToLeaf(node, key, path)
 	return *path, val, err
@@ -194,7 +191,7 @@ func (tree *Tree) PathToLeaf(node *inode.Node, key []byte) (PathToLeaf, *inode.N
 // pathToLeaf is a helper which recursively constructs the PathToLeaf.
 // As an optimization the already constructed path is passed in as an argument
 // and is shared among recursive calls.
-func (tree *Tree) pathToLeaf(node *inode.Node, key []byte, path *PathToLeaf) (*inode.Node, error) {
+func (tree *ImmutableTree) pathToLeaf(node *inode.Node, key []byte, path *PathToLeaf) (*inode.Node, error) {
 	if node.SubTreeHeight() == 0 {
 		if bytes.Equal(node.Key(), key) {
 			return node, nil

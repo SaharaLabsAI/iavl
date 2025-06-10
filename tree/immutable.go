@@ -1,74 +1,236 @@
 package tree
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"time"
+
 	"github.com/cosmos/iavl/v2/common/constants"
+	"github.com/cosmos/iavl/v2/common/metrics"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
+	"github.com/cosmos/iavl/v2/db"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
-func (tree *Tree) GetImmutable(version int64) (*Tree, error) {
+type ImmutableTree struct {
+	version int64
+	root    *inode.Node
+
+	db       db.ReadonlyDB
+	nodePool *nodepool.NodePool
+
+	metrics metrics.Proxy
+}
+
+func (tree *Tree) GetImmutable(version int64) (*ImmutableTree, error) {
 	// We can discard whole pool after usage
 	pool := nodepool.NewNodePool()
 	db := tree.db.Readonly()
 
-	imTree := &Tree{
-		db:             db,
-		nodePool:       pool,
-		metrics:        tree.metrics,
-		maxWorkingSize: tree.maxWorkingSize,
-		heightFilter:   tree.heightFilter,
-		metricsProxy:   tree.metricsProxy,
-		leafSequence:   constants.LeafSequenceStart,
-		hashedVersion:  version,
-		cache:          make(map[string][]byte),
-		deleted:        make(map[string]bool),
+	imTree := &ImmutableTree{
+		db:       db,
+		nodePool: pool,
+		metrics:  tree.metrics,
 	}
 
 	if err := imTree.LoadVersion(version); err != nil {
 		return nil, err
 	}
 
-	imTree.immutable = true
-
 	return imTree, nil
 }
 
-func (tree *Tree) GetImmutableProvable(version int64) (*Tree, error) {
-	// We can discard whole pool after usage
-	pool := nodepool.NewNodePool()
-	db := tree.db.Readonly()
+func (tree *ImmutableTree) Close() error {
+	tree.nodePool = nil
 
-	imTree := &Tree{
-		db:             db,
-		nodePool:       pool,
-		metrics:        tree.metrics,
-		maxWorkingSize: tree.maxWorkingSize,
-		heightFilter:   tree.heightFilter,
-		metricsProxy:   tree.metricsProxy,
-		leafSequence:   constants.LeafSequenceStart,
-		hashedVersion:  version,
-		cache:          make(map[string][]byte),
-		deleted:        make(map[string]bool),
-	}
-
-	if err := imTree.LoadVersion(version); err != nil {
-		return nil, err
-	}
-
-	imTree.immutable = true
-
-	return imTree, nil
+	return tree.db.Close()
 }
 
-func (tree *Tree) IsImmutable() bool {
-	return tree.immutable
+func (tree *ImmutableTree) LoadVersion(version int64) (err error) {
+	if tree.db == nil {
+		return errors.New("db is nil")
+	}
+
+	if version == 0 {
+		return nil
+	}
+
+	tree.root, err = tree.db.LoadRoot(tree.nodePool, version)
+	if err != nil {
+		return err
+	}
+	tree.version = version
+
+	return nil
 }
 
-// FIXME: implement Immutable Tree struct, which use readonly DB
-func (tree *Tree) DiscardImmutableTree() error {
-	// tree.sql.leafWrite = nil
-	// tree.sql.treeWrite = nil
-	// tree.sql.read = nil
-	// tree.sql.readPool = nil
-	// tree.sql.pool = nil
-	return tree.Close()
+func (tree *ImmutableTree) Has(key []byte) (bool, error) {
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_has")
+	}
+
+	val, err := tree.Get(key)
+	if err != nil {
+		return false, err
+	}
+
+	return val != nil, nil
+}
+
+func (tree *ImmutableTree) Get(key []byte) ([]byte, error) {
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_db_get")
+	}
+
+	return tree.db.Get(key, tree.version)
+}
+
+func (tree *ImmutableTree) Hash() []byte {
+	if tree.root == nil {
+		return inode.EmptyHash
+	}
+	return tree.root.Hash()
+}
+
+func (tree *ImmutableTree) GetWithIndex(key []byte) (int64, []byte, error) {
+	if tree.root == nil {
+		return 0, nil, nil
+	}
+
+	return tree.get(tree.root, key)
+}
+
+func (tree *ImmutableTree) GetByIndex(index int64) (key []byte, value []byte, err error) {
+	if tree.root == nil {
+		return nil, nil, nil
+	}
+
+	return tree.getByIndex(tree.root, index)
+}
+
+func (tree *ImmutableTree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
+	}
+
+	if node.IsLeaf() {
+		switch bytes.Compare(node.Key(), key) {
+		case -1:
+			return 1, nil, nil
+		case 1:
+			return 0, nil, nil
+		default:
+			return 0, node.Value(), nil
+		}
+	}
+
+	if bytes.Compare(key, node.Key()) < 0 {
+		leftNode, err := tree.getLeftNode(node)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		return tree.get(leftNode, key)
+	}
+
+	rightNode, err := tree.getRightNode(node)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	index, value, err = tree.get(rightNode, key)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	index += node.Size() - rightNode.Size()
+
+	return index, value, nil
+}
+
+func (tree *ImmutableTree) getByIndex(node *inode.Node, index int64) (key []byte, value []byte, err error) {
+	if node.IsLeaf() {
+		if index == 0 {
+			return node.Key(), node.Value(), nil
+		}
+		return nil, nil, nil
+	}
+
+	leftNode, err := tree.getLeftNode(node)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if index < leftNode.Size() {
+		return tree.getByIndex(leftNode, index)
+	}
+
+	rightNode, err := tree.getRightNode(node)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return tree.getByIndex(rightNode, index-leftNode.Size())
+}
+
+func (tree *ImmutableTree) getLeftNode(node *inode.Node) (*inode.Node, error) {
+	node.CheckValid()
+	if node.IsLeaf() {
+		return nil, errors.New("leaf node has no left node")
+	}
+	if node.LeftNode() != nil {
+		return node.LeftNode(), nil
+	}
+
+	leftNode, err := tree.db.GetNode(tree.nodePool, node.LeftNodeKey())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get left node node_key=%s height=%d path=%s: %w",
+			node.LeftNodeKey(), node.SubTreeHeight(), tree.db.Path(), err)
+	}
+
+	node.SetLeft(leftNode)
+
+	return node.LeftNode(), nil
+}
+
+func (tree *ImmutableTree) getRightNode(node *inode.Node) (*inode.Node, error) {
+	node.CheckValid()
+	if node.IsLeaf() {
+		return nil, errors.New("leaf node has no right node")
+	}
+	if node.RightNode() != nil {
+		return node.RightNode(), nil
+	}
+
+	rightNode, err := tree.db.GetNode(tree.nodePool, node.RightNodeKey())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get right node node_key=%s height=%d path=%s: %w",
+			node.RightNodeKey(), node.SubTreeHeight(), tree.db.Path(), err)
+	}
+
+	node.SetRight(rightNode)
+
+	return node.RightNode(), nil
+}
+
+func (tree *ImmutableTree) returnNode(node *inode.Node) {
+	if node == nil {
+		return
+	}
+
+	node.CheckValid()
+
+	// Make sure node is not the tree's root before recycling
+	if node == tree.root {
+		return
+	}
+
+	// Check for lingering references before returning to pool
+	if node.LeftNode() != nil || node.RightNode() != nil {
+		panic("Attempted to return node with active child references")
+	}
+
+	// Return node to the pool for reuse
+	tree.nodePool.Put(node)
 }

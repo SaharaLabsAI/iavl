@@ -14,21 +14,17 @@ const (
 )
 
 type DB interface {
-	Type() Type
-	Readonly() ReadonlyDB
-	Import
 	Read
 	Write
+	Import
+	Type() Type
 	Close() error
+	Readonly() ReadonlyDB
 }
 
-// FIXME: later
 type ReadonlyDB interface {
-	Type() Type
-	Readonly() ReadonlyDB
-	Import
 	Read
-	Write
+	Type() Type
 	Close() error
 }
 

@@ -105,9 +105,3 @@ func (tree *Tree) Height() int8 {
 func (tree *Tree) Close() error {
 	return tree.db.Close()
 }
-
-// FIXME
-func (tree *Tree) replayChangelog(toVersion int64, targetHash []byte) error {
-	// return tree.sql.replayChangelog(tree, toVersion, targetHash)
-	return nil
-}

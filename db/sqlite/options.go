@@ -29,10 +29,11 @@ const openReadOnlyMode = gosqlite.OPEN_READONLY | gosqlite.OPEN_FULLMUTEX
 
 type ConnectionType int
 
+// NOTE: Immutable requires reconnect to see new data
 const (
 	UseOption ConnectionType = iota
-	Immutable
 	ReadOnly
+	Immutable
 )
 
 type Options struct {

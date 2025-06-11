@@ -13,7 +13,7 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-type SqliteReadConn struct {
+type ReadConn struct {
 	conn *gosqlite.Conn
 
 	treeVersion int64
@@ -29,8 +29,8 @@ type SqliteReadConn struct {
 	logger logger.Logger
 }
 
-func NewSqliteReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger) *SqliteReadConn {
-	return &SqliteReadConn{
+func NewReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger) *ReadConn {
+	return &ReadConn{
 		conn:        conn,
 		treeVersion: 0,
 		opts:        opts,
@@ -38,15 +38,15 @@ func NewSqliteReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger)
 	}
 }
 
-func NewSqliteImmutableReadConn(treeVersion int64, opts *Options, logger logger.Logger) *SqliteReadConn {
-	return &SqliteReadConn{
+func NewSqliteImmutableReadConn(treeVersion int64, opts *Options, logger logger.Logger) *ReadConn {
+	return &ReadConn{
 		treeVersion: treeVersion,
 		opts:        opts,
 		logger:      logger,
 	}
 }
 
-func (c *SqliteReadConn) ResetToTreeVersion(version int64) error {
+func (c *ReadConn) ResetToTreeVersion(version int64) error {
 	if c.treeVersion >= version {
 		// No need to reset
 		return nil
@@ -118,11 +118,11 @@ func (c *SqliteReadConn) ResetToTreeVersion(version int64) error {
 	return nil
 }
 
-func (c *SqliteReadConn) Prepare(statement string, args ...interface{}) (*gosqlite.Stmt, error) {
+func (c *ReadConn) Prepare(statement string, args ...interface{}) (*gosqlite.Stmt, error) {
 	return c.conn.Prepare(statement, args...)
 }
 
-func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error) {
+func (c *ReadConn) getVersioned(version int64, key []byte) ([]byte, error) {
 	defer c.MarkIdle()
 
 	if len(key) == 0 {
@@ -165,7 +165,7 @@ func (c *SqliteReadConn) getVersioned(version int64, key []byte) ([]byte, error)
 	return inode.DecodeValueOnly(nodeBz)
 }
 
-func (c *SqliteReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
+func (c *ReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
 	if constants.IsLeafSeq(nodekey.Sequence()) {
 		return c.getLeaf(pool, nodekey)
 	}
@@ -173,25 +173,25 @@ func (c *SqliteReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey)
 	return c.getNode(pool, nodekey)
 }
 
-func (c *SqliteReadConn) IsInUse() bool {
+func (c *ReadConn) IsInUse() bool {
 	return c.inUse.Load()
 }
 
-func (c *SqliteReadConn) MarkInUse() {
+func (c *ReadConn) MarkInUse() {
 	c.inUse.Store(true)
 }
 
-func (c *SqliteReadConn) MarkIdle() {
+func (c *ReadConn) MarkIdle() {
 	c.inUse.Store(false)
 }
 
-func (c *SqliteReadConn) Release() error {
+func (c *ReadConn) Release() error {
 	c.MarkIdle()
 
 	return nil
 }
 
-func (c *SqliteReadConn) Close() error {
+func (c *ReadConn) Close() error {
 	if c.queryLeaf != nil {
 		if err := c.queryLeaf.Close(); err != nil {
 			return err
@@ -216,7 +216,7 @@ func (c *SqliteReadConn) Close() error {
 	return c.conn.Close()
 }
 
-func (c *SqliteReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
+func (c *ReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	defer c.MarkIdle()
 
 	var err error
@@ -254,7 +254,7 @@ func (c *SqliteReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey)
 	return node, nil
 }
 
-func (c *SqliteReadConn) getNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
+func (c *ReadConn) getNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	defer c.MarkIdle()
 
 	var err error

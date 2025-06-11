@@ -13,7 +13,7 @@ import (
 	"github.com/cosmos/iavl/v2/common/metrics"
 )
 
-type ReadonlyConnPool struct {
+type ReadConnPool struct {
 	opts *Options
 
 	treeVersion atomic.Int64
@@ -28,12 +28,12 @@ type ReadonlyConnPool struct {
 	mu sync.RWMutex
 }
 
-func NewReadonlyConnPool(opts *Options, MaxPoolSize int) (*ReadonlyConnPool, error) {
+func NewReadConnPool(opts *Options, MaxPoolSize int) (*ReadConnPool, error) {
 	if MaxPoolSize <= 0 {
 		MaxPoolSize = defaultMaxPoolSize
 	}
 
-	pool := &ReadonlyConnPool{
+	pool := &ReadConnPool{
 		opts:    opts,
 		conns:   NewConnPool(opts, MaxPoolSize, opts.Logger),
 		iters:   NewIterPool(opts.Logger),
@@ -46,21 +46,21 @@ func NewReadonlyConnPool(opts *Options, MaxPoolSize int) (*ReadonlyConnPool, err
 	return pool, nil
 }
 
-func (pool *ReadonlyConnPool) SetTreeVersion(version int64) {
+func (pool *ReadConnPool) SetTreeVersion(version int64) {
 	pool.treeVersion.Store(version)
 }
 
-func (pool *ReadonlyConnPool) SetSavingTree() {
+func (pool *ReadConnPool) SetSavingTree() {
 	pool.savingTree.Store(true)
 	pool.mu.Lock()
 }
 
-func (pool *ReadonlyConnPool) UnsetSavingTree() {
+func (pool *ReadConnPool) UnsetSavingTree() {
 	pool.savingTree.Store(false)
 	pool.mu.Unlock()
 }
 
-func (pool *ReadonlyConnPool) GetConn() (*SqliteReadConn, error) {
+func (pool *ReadConnPool) GetConn() (*ReadConn, error) {
 	pool.mu.RLock()
 
 	if pool.savingTree.Load() {
@@ -92,7 +92,7 @@ func (pool *ReadonlyConnPool) GetConn() (*SqliteReadConn, error) {
 }
 
 // Close closes all connections in the pool
-func (pool *ReadonlyConnPool) Close() error {
+func (pool *ReadConnPool) Close() error {
 	if err := pool.iters.closeHangingIterators(); err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (pool *ReadonlyConnPool) Close() error {
 	return pool.conns.close()
 }
 
-func (pool *ReadonlyConnPool) ResetShardQueries() {
+func (pool *ReadConnPool) ResetShardQueries() {
 	// disable now because we don't enable sharding
 
 	// pool.mu.Lock()
@@ -111,15 +111,15 @@ func (pool *ReadonlyConnPool) ResetShardQueries() {
 	// }
 }
 
-func (pool *ReadonlyConnPool) CloseKVIterstor(idx int) error {
+func (pool *ReadConnPool) CloseKVIterstor(idx int) error {
 	return pool.iters.closeKVIterstor(idx)
 }
 
-func (pool *ReadonlyConnPool) CloseHangingIterators() error {
+func (pool *ReadConnPool) CloseHangingIterators() error {
 	return pool.iters.closeHangingIterators()
 }
 
-func (pool *ReadonlyConnPool) GetVersionDescLeafIterator(version int64, limit int) (stmt *gosqlite.Stmt, idx int, err error) {
+func (pool *ReadConnPool) GetVersionDescLeafIterator(version int64, limit int) (stmt *gosqlite.Stmt, idx int, err error) {
 	conn, err := pool.GetConn()
 	if err != nil {
 		return nil, 0, err
@@ -154,7 +154,7 @@ func (pool *ReadonlyConnPool) GetVersionDescLeafIterator(version int64, limit in
 type ConnPool struct {
 	opts *Options
 
-	conns []*SqliteReadConn
+	conns []*ReadConn
 
 	logger logger.Logger
 
@@ -164,12 +164,12 @@ type ConnPool struct {
 func NewConnPool(opts *Options, MaxPoolSize int, logger logger.Logger) *ConnPool {
 	return &ConnPool{
 		opts:   opts,
-		conns:  make([]*SqliteReadConn, 0, MaxPoolSize),
+		conns:  make([]*ReadConn, 0, MaxPoolSize),
 		logger: logger,
 	}
 }
 
-func (c *ConnPool) getConn(version int64) (*SqliteReadConn, error) {
+func (c *ConnPool) getConn(version int64) (*ReadConn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -212,7 +212,7 @@ func (c *ConnPool) close() error {
 type IterPool struct {
 	kvItrIdx    int
 	kvIterators map[int]*gosqlite.Stmt
-	kvItrConns  map[int]*SqliteReadConn
+	kvItrConns  map[int]*ReadConn
 
 	logger logger.Logger
 
@@ -222,7 +222,7 @@ type IterPool struct {
 func NewIterPool(logger logger.Logger) *IterPool {
 	return &IterPool{
 		kvIterators: make(map[int]*gosqlite.Stmt),
-		kvItrConns:  make(map[int]*SqliteReadConn),
+		kvItrConns:  make(map[int]*ReadConn),
 		logger:      logger,
 	}
 }
@@ -236,7 +236,7 @@ func (i *IterPool) nextIdx() int {
 	return i.kvItrIdx
 }
 
-func (i *IterPool) setIterator(idx int, stmt *gosqlite.Stmt, conn *SqliteReadConn) {
+func (i *IterPool) setIterator(idx int, stmt *gosqlite.Stmt, conn *ReadConn) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 

@@ -27,11 +27,11 @@ type SqliteDb struct {
 	writeCancel context.CancelFunc
 
 	// Used by block producer or syncer
-	read *SqliteReadConn
+	read *ReadConn
 
 	// Separate read conn configuration from main read, typical used by rpc query
-	readPool *ReadonlyConnPool
-	hashPool []*SqliteReadConn
+	readPool *ReadConnPool
+	hashPool []*ReadConn
 
 	metrics metrics.Proxy
 	logger  logger.Logger
@@ -82,9 +82,9 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 	// 	return nil, err
 	// }
 
-	sql.hashPool = make([]*SqliteReadConn, 0)
+	sql.hashPool = make([]*ReadConn, 0)
 
-	sql.readPool, err = NewReadonlyConnPool(&opts, opts.MaxPoolSize)
+	sql.readPool, err = NewReadConnPool(&opts, opts.MaxPoolSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize read connection pool: %w", err)
 	}
@@ -122,7 +122,7 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 	return sql.resetReadConn()
 }
 
-func (sql *SqliteDb) ReadPool() *ReadonlyConnPool {
+func (sql *SqliteDb) ReadPool() *ReadConnPool {
 	return sql.readPool
 }
 
@@ -174,7 +174,7 @@ func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
 	return nil
 }
 
-func (sql *SqliteDb) newReadConn() (*SqliteReadConn, error) {
+func (sql *SqliteDb) newReadConn() (*ReadConn, error) {
 	var (
 		conn *gosqlite.Conn
 		err  error
@@ -232,7 +232,7 @@ func (sql *SqliteDb) newReadConn() (*SqliteReadConn, error) {
 	// 	return nil, err
 	// }
 
-	c := NewSqliteReadConn(conn, &sql.opts, sql.logger)
+	c := NewReadConn(conn, &sql.opts, sql.logger)
 
 	return c, nil
 }
@@ -268,7 +268,7 @@ func (sql *SqliteDb) isReadonlyDB() bool {
 	return sql.writeDb == nil
 }
 
-func (sql *SqliteDb) getReadConn() (*SqliteReadConn, error) {
+func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
 	if sql.isReadonlyDB() {
 		return sql.readPool.GetConn()
 	}
@@ -281,7 +281,7 @@ func (sql *SqliteDb) getReadConn() (*SqliteReadConn, error) {
 	return sql.read, err
 }
 
-func (sql *SqliteDb) newHashConnection() (*SqliteReadConn, error) {
+func (sql *SqliteDb) newHashConnection() (*ReadConn, error) {
 	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return nil, err
@@ -320,7 +320,7 @@ func (sql *SqliteDb) newHashConnection() (*SqliteReadConn, error) {
 		return nil, err
 	}
 
-	return &SqliteReadConn{
+	return &ReadConn{
 		conn:        conn,
 		treeVersion: 0,
 		opts:        &sql.opts,
@@ -546,7 +546,7 @@ func (sql *SqliteDb) closeHangingIterators() error {
 // 	sql.opts.Logger.Info(fmt.Sprintf("replaying changelog from=%d to=%d", tree.version.Load(), toVersion), logPath...)
 //
 // 	var q *gosqlite.Stmt
-// 	var conn *SqliteReadConn
+// 	var conn *ReadConn
 // 	var err error
 //
 // 	conn, err = sql.getReadConn()

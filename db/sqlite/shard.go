@@ -248,12 +248,12 @@ type BranchShardQuery struct {
 	stmts map[int64]*gosqlite.Stmt // shardID -> stmt
 }
 
-func PrepareBranchShardQuery(c *SqliteReadConn) *BranchShardQuery {
+func PrepareBranchShardQuery(c *ReadConn) *BranchShardQuery {
 	stmts := make(map[int64]*gosqlite.Stmt)
 	return &BranchShardQuery{stmts: stmts}
 }
 
-func (sq *BranchShardQuery) PrepareVersion(c *SqliteReadConn, version int64) error {
+func (sq *BranchShardQuery) PrepareVersion(c *ReadConn, version int64) error {
 	shardID := ToShardID(version)
 
 	if _, exists := sq.stmts[shardID]; exists {

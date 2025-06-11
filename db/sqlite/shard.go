@@ -22,7 +22,7 @@ type BranchShards struct {
 	shardIDs map[int64]bool
 }
 
-func NewBranchShards(sql *WriteDB) (*BranchShards, error) {
+func NewBranchShards(sql *WriteConn) (*BranchShards, error) {
 	s := &BranchShards{}
 	if err := s.reloadShardIDs(sql); err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func NewBranchShards(sql *WriteDB) (*BranchShards, error) {
 	return s, nil
 }
 
-func (s *BranchShards) reloadShardIDs(sql *WriteDB) error {
+func (s *BranchShards) reloadShardIDs(sql *WriteConn) error {
 	q, err := sql.treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tree_%'")
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (s *BranchShards) reloadShardIDs(sql *WriteDB) error {
 	return nil
 }
 
-func (s *BranchShards) isSharded(sql *WriteDB) (bool, error) {
+func (s *BranchShards) isSharded(sql *WriteConn) (bool, error) {
 	q, err := sql.treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tree_%'")
 	if err != nil {
 		return false, err
@@ -101,7 +101,7 @@ type BranchShardInsert struct {
 	stmts map[int64]*gosqlite.Stmt // shardID -> stmt
 }
 
-func PrepareBranchShardInsert(sql *WriteDB, shards *BranchShards) (*BranchShardInsert, error) {
+func PrepareBranchShardInsert(sql *WriteConn, shards *BranchShards) (*BranchShardInsert, error) {
 	stmts := make(map[int64]*gosqlite.Stmt)
 
 	for shardID, _ := range shards.shardIDs {
@@ -116,7 +116,7 @@ func PrepareBranchShardInsert(sql *WriteDB, shards *BranchShards) (*BranchShardI
 	return &BranchShardInsert{stmts: stmts}, nil
 }
 
-func (ss *BranchShardInsert) EnsureShardTable(sql *WriteDB, shardID int64) error {
+func (ss *BranchShardInsert) EnsureShardTable(sql *WriteConn, shardID int64) error {
 	if sql.branchShards.hasShardID(shardID) {
 		return nil
 	}
@@ -174,13 +174,13 @@ type BranchShardDelete struct {
 	nonexists map[int64]bool
 }
 
-func PrepareBranchShardDelete(sql *WriteDB, _ *BranchShards) (*BranchShardDelete, error) {
+func PrepareBranchShardDelete(sql *WriteConn, _ *BranchShards) (*BranchShardDelete, error) {
 	stmts := make(map[int64]*gosqlite.Stmt)
 	nonexists := make(map[int64]bool)
 	return &BranchShardDelete{stmts: stmts, nonexists: nonexists}, nil
 }
 
-func (sd *BranchShardDelete) PrepareVersion(sql *WriteDB, version int64) error {
+func (sd *BranchShardDelete) PrepareVersion(sql *WriteConn, version int64) error {
 	shardID := ToShardID(version)
 
 	if _, exists := sd.stmts[shardID]; exists {

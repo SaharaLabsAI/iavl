@@ -13,7 +13,7 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-type WriteDB struct {
+type WriteConn struct {
 	// 2 separate databases and 2 separate connections.
 	// the underlying databases have different WAL policies therefore separation is required.
 	leafWrite *gosqlite.Conn
@@ -32,8 +32,8 @@ type WriteDB struct {
 	logger  logger.Logger
 }
 
-func NewWriteDB(opts Options) (*WriteDB, error) {
-	wdb := &WriteDB{
+func NewWriteConn(opts Options) (*WriteConn, error) {
+	wdb := &WriteConn{
 		opts:    opts,
 		metrics: opts.Metrics,
 		logger:  opts.Logger,
@@ -60,7 +60,7 @@ func NewWriteDB(opts Options) (*WriteDB, error) {
 	return wdb, nil
 }
 
-func (sql *WriteDB) SaveRoot(version int64, node *inode.Node) error {
+func (sql *WriteConn) SaveRoot(version int64, node *inode.Node) error {
 	if node != nil {
 		buf := pool.BufPool.Get().(*bytes.Buffer)
 		buf.Reset()
@@ -87,7 +87,7 @@ func (sql *WriteDB) SaveRoot(version int64, node *inode.Node) error {
 	return sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version) VALUES (?)", version)
 }
 
-func (sql *WriteDB) Revert(version int64) error {
+func (sql *WriteConn) Revert(version int64) error {
 	if err := sql.leafWrite.Exec("DELETE FROM leaf WHERE version > ?", version); err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (sql *WriteDB) Revert(version int64) error {
 	return nil
 }
 
-func (sql *WriteDB) Close() error {
+func (sql *WriteConn) Close() error {
 	if sql.leafInsert != nil {
 		if err := sql.leafInsert.Close(); err != nil {
 			sql.logger.Warn("failed to close leaf insert statement", "err", err)
@@ -159,7 +159,7 @@ func (sql *WriteDB) Close() error {
 	return nil
 }
 
-func (sql *WriteDB) createShardTableIfNotExists(shardID int) error {
+func (sql *WriteConn) createShardTableIfNotExists(shardID int) error {
 	tableName := fmt.Sprintf("tree_%d", shardID)
 	q, err := sql.treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
 	if err != nil {
@@ -184,7 +184,7 @@ func (sql *WriteDB) createShardTableIfNotExists(shardID int) error {
 	return sql.treeWrite.Exec(fmt.Sprintf(StmtCreateTreeBranchShardTableFormat, shardID))
 }
 
-func (sql *WriteDB) createTableIfNotExists() error {
+func (sql *WriteConn) createTableIfNotExists() error {
 	q, err := sql.treeWrite.Prepare("SELECT name from sqlite_master WHERE type='table' AND name='root'")
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func (sql *WriteDB) createTableIfNotExists() error {
 	return nil
 }
 
-func (sql *WriteDB) resetWriteConn() (err error) {
+func (sql *WriteConn) resetWriteConn() (err error) {
 	if sql.treeWrite != nil {
 		err = sql.treeWrite.Close()
 		if err != nil {
@@ -353,11 +353,11 @@ func (sql *WriteDB) resetWriteConn() (err error) {
 	return err
 }
 
-func (sql *WriteDB) preapreBranchShardInsertStatement(shardID int64) (*gosqlite.Stmt, error) {
+func (sql *WriteConn) preapreBranchShardInsertStatement(shardID int64) (*gosqlite.Stmt, error) {
 	return sql.treeWrite.Prepare(fmt.Sprintf(StmtInsertBranchShardFormat, shardID))
 }
 
-func (sql *WriteDB) prepareInsertStatements() (err error) {
+func (sql *WriteConn) prepareInsertStatements() (err error) {
 	if sql.leafInsert != nil {
 		if err = sql.leafInsert.Close(); err != nil {
 			return err

@@ -9,20 +9,20 @@ import (
 )
 
 func (sql *SqliteDb) PrepareImport() error {
-	err := sql.writeDb.treeWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 10*1024*1024*1024)) // 8G
+	err := sql.write.treeWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 10*1024*1024*1024)) // 8G
 	if err != nil {
 		return err
 	}
-	err = sql.writeDb.treeWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", -2*1024*1024)) // 2G
+	err = sql.write.treeWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", -2*1024*1024)) // 2G
 	if err != nil {
 		return err
 	}
 
-	err = sql.writeDb.leafWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 14*1024*1024*1024)) // 16G
+	err = sql.write.leafWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 14*1024*1024*1024)) // 16G
 	if err != nil {
 		return err
 	}
-	err = sql.writeDb.leafWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", -2*1024*1024)) // 2G
+	err = sql.write.leafWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", -2*1024*1024)) // 2G
 	if err != nil {
 		return err
 	}
@@ -31,27 +31,27 @@ func (sql *SqliteDb) PrepareImport() error {
 }
 
 func (sql *SqliteDb) FinishImport() error {
-	err := sql.writeDb.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	err := sql.write.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 	if err != nil {
 		return fmt.Errorf("failed tree checkpoint; %w", err)
 	}
 
-	err = sql.writeDb.treeWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 0))
+	err = sql.write.treeWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 0))
 	if err != nil {
 		return err
 	}
 
-	err = sql.writeDb.treeWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", defaultWriteCacheSize/2))
+	err = sql.write.treeWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", defaultWriteCacheSize/2))
 	if err != nil {
 		return err
 	}
 
-	err = sql.writeDb.leafWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 0))
+	err = sql.write.leafWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 0))
 	if err != nil {
 		return err
 	}
 
-	err = sql.writeDb.leafWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", defaultWriteCacheSize/2))
+	err = sql.write.leafWrite.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", defaultWriteCacheSize/2))
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (sql *SqliteDb) WriteBatch(importedNodes *db.DirtyNodes) error {
 
 	batch := WriteBatch{
 		updates: importedNodes,
-		sql:     sql.writeDb,
+		conn:    sql.write,
 		size:    int64(size),
 		logger:  sql.logger,
 		metrics: sql.metrics,

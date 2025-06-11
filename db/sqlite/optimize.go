@@ -9,7 +9,7 @@ import (
 	"github.com/cosmos/iavl/v2/common/constants"
 )
 
-func runAnalyze(sql *WriteDB) error {
+func runAnalyze(sql *WriteConn) error {
 	start := time.Now()
 	defer func() {
 		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_analyze")
@@ -42,7 +42,7 @@ func runAnalyze(sql *WriteDB) error {
 	return nil
 }
 
-func runOptimize(sql *WriteDB) error {
+func runOptimize(sql *WriteConn) error {
 	start := time.Now()
 	defer func() {
 		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_optimize")

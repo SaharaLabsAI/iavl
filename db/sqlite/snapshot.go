@@ -54,7 +54,7 @@ type ExpectedTree interface {
 
 func (sql *SqliteDb) Snapshot(ctx context.Context, tree ExpectedTree) error {
 	version := tree.Version()
-	err := sql.writeDb.leafWrite.Exec(
+	err := sql.write.leafWrite.Exec(
 		fmt.Sprintf("CREATE TABLE snapshot_%d (ordinal int, version int, sequence int, bytes blob);", version))
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (sql *SqliteDb) Snapshot(ctx context.Context, tree ExpectedTree) error {
 		return err
 	}
 	sql.logger.Info(fmt.Sprintf("creating index on snapshot_%d", version), "path", sql.opts.Path)
-	err = sql.writeDb.leafWrite.Exec(fmt.Sprintf("CREATE INDEX snapshot_%d_idx ON snapshot_%d (ordinal);", version, version))
+	err = sql.write.leafWrite.Exec(fmt.Sprintf("CREATE INDEX snapshot_%d_idx ON snapshot_%d (ordinal);", version, version))
 	return err
 }
 
@@ -273,7 +273,7 @@ func (sql *SqliteDb) WriteSnapshot(
 		log:       sql.logger,
 		writeTree: true,
 	}
-	err := snap.sql.writeDb.leafWrite.Exec(
+	err := snap.sql.write.leafWrite.Exec(
 		fmt.Sprintf(`CREATE TABLE snapshot_%d (ordinal int, version int, sequence int, bytes blob);`, version))
 	if err != nil {
 		return nil, err
@@ -310,11 +310,11 @@ func (sql *SqliteDb) WriteSnapshot(
 	}
 
 	sql.logger.Info("creating table indexes")
-	err = sql.writeDb.leafWrite.Exec(fmt.Sprintf("CREATE INDEX snapshot_%d_idx ON snapshot_%d (ordinal);", version, version))
+	err = sql.write.leafWrite.Exec(fmt.Sprintf("CREATE INDEX snapshot_%d_idx ON snapshot_%d (ordinal);", version, version))
 	if err != nil {
 		return nil, err
 	}
-	err = snap.sql.writeDb.leafWrite.Exec("CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);")
+	err = snap.sql.write.leafWrite.Exec("CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);")
 	if err != nil {
 		return nil, err
 	}
@@ -519,8 +519,8 @@ func (snap *sqliteSnapshot) flush() error {
 		}
 		errs = errors.Join(
 			errs,
-			snap.sql.writeDb.leafWrite.Rollback(),
-			snap.sql.writeDb.leafWrite.Close(),
+			snap.sql.write.leafWrite.Rollback(),
+			snap.sql.write.leafWrite.Close(),
 		)
 		if errs != nil {
 			return errs
@@ -528,8 +528,8 @@ func (snap *sqliteSnapshot) flush() error {
 		if snap.writeTree {
 			errs = errors.Join(
 				errs,
-				snap.sql.writeDb.treeWrite.Rollback(),
-				snap.sql.writeDb.treeWrite.Close(),
+				snap.sql.write.treeWrite.Rollback(),
+				snap.sql.write.treeWrite.Close(),
 			)
 		}
 
@@ -545,7 +545,7 @@ func (snap *sqliteSnapshot) flush() error {
 	))
 
 	err := errors.Join(
-		snap.sql.writeDb.leafWrite.Commit(),
+		snap.sql.write.leafWrite.Commit(),
 		snap.snapshotInsert.Close(),
 	)
 	if err != nil {
@@ -554,7 +554,7 @@ func (snap *sqliteSnapshot) flush() error {
 	if snap.writeTree {
 		err = errors.Join(
 			snap.leafInsert.Close(),
-			snap.sql.writeDb.treeWrite.Commit(),
+			snap.sql.write.treeWrite.Commit(),
 			snap.treeInsert.Close(),
 		)
 	}
@@ -563,26 +563,26 @@ func (snap *sqliteSnapshot) flush() error {
 }
 
 func (snap *sqliteSnapshot) prepareWrite() error {
-	err := snap.sql.writeDb.leafWrite.Begin()
+	err := snap.sql.write.leafWrite.Begin()
 	if err != nil {
 		return err
 	}
 
-	snap.snapshotInsert, err = snap.sql.writeDb.leafWrite.Prepare(
+	snap.snapshotInsert, err = snap.sql.write.leafWrite.Prepare(
 		fmt.Sprintf("INSERT INTO snapshot_%d (ordinal, version, sequence, bytes) VALUES (?, ?, ?, ?);",
 			snap.version))
 
 	if snap.writeTree {
-		err = snap.sql.writeDb.treeWrite.Begin()
+		err = snap.sql.write.treeWrite.Begin()
 		if err != nil {
 			return err
 		}
 
-		snap.leafInsert, err = snap.sql.writeDb.leafWrite.Prepare("INSERT INTO leaf (version, sequence, bytes) VALUES (?, ?, ?)")
+		snap.leafInsert, err = snap.sql.write.leafWrite.Prepare("INSERT INTO leaf (version, sequence, bytes) VALUES (?, ?, ?)")
 		if err != nil {
 			return err
 		}
-		snap.treeInsert, err = snap.sql.writeDb.treeWrite.Prepare(
+		snap.treeInsert, err = snap.sql.write.treeWrite.Prepare(
 			fmt.Sprintf("INSERT INTO tree_%d (version, sequence, bytes) VALUES (?, ?, ?)", snap.version))
 	}
 

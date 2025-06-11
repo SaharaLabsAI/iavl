@@ -22,12 +22,12 @@ import (
 type SqliteDb struct {
 	opts Options
 
-	writeDb     *WriteDB
+	write       *WriteConn
 	writeEv     *WriteEventLoop
 	writeCancel context.CancelFunc
 
 	// Used by block producer or syncer
-	mainRead *ReadConn
+	read *ReadConn
 
 	// Separate read conn configuration from main read, typical used by rpc query
 	readPool *ReadConnPool
@@ -61,19 +61,19 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 		}
 	}
 
-	sql.writeDb, err = NewWriteDB(opts)
+	sql.write, err = NewWriteConn(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	sql.writeEv, sql.writeCancel = NewWriteEventLoop(sql.writeDb, opts.Logger, opts.Metrics)
+	sql.writeEv, sql.writeCancel = NewWriteEventLoop(sql.write, opts.Logger, opts.Metrics)
 
 	if sql.opts.OptimizeOnStart {
-		if err = runAnalyze(sql.writeDb); err != nil {
+		if err = runAnalyze(sql.write); err != nil {
 			return nil, err
 		}
 
-		if err = runOptimize(sql.writeDb); err != nil {
+		if err = runOptimize(sql.write); err != nil {
 			return nil, err
 		}
 	}
@@ -110,7 +110,7 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 	defer sql.readPool.UnsetSavingTree()
 
 	if updates == nil {
-		return sql.writeDb.SaveRoot(version, root)
+		return sql.write.SaveRoot(version, root)
 	}
 
 	if err := sql.writeEv.SaveTree(root, version, updates); err != nil {
@@ -144,7 +144,7 @@ func (sql *SqliteDb) Path() string {
 }
 
 func (sql *SqliteDb) Revert(toVersion int64) error {
-	return sql.writeDb.Revert(toVersion)
+	return sql.write.Revert(toVersion)
 }
 
 func (sql *SqliteDb) PausePruning(pause bool) {
@@ -171,7 +171,7 @@ func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
 }
 
 func (sql *SqliteDb) isReadonlyDB() bool {
-	return sql.writeDb == nil
+	return sql.write == nil
 }
 
 func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
@@ -180,11 +180,11 @@ func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
 	}
 
 	var err error
-	if sql.mainRead == nil {
-		sql.mainRead, err = NewMainReadConn(&sql.opts, sql.logger)
+	if sql.read == nil {
+		sql.read, err = NewMainReadConn(&sql.opts, sql.logger)
 	}
 
-	return sql.mainRead, err
+	return sql.read, err
 }
 
 func (sql *SqliteDb) newHashConnection() (*ReadConn, error) {
@@ -242,8 +242,8 @@ func (sql *SqliteDb) Close() error {
 		return nil
 	}
 
-	if sql.writeDb != nil {
-		if err := sql.writeDb.Close(); err != nil {
+	if sql.write != nil {
+		if err := sql.write.Close(); err != nil {
 			return err
 		}
 	}
@@ -271,8 +271,8 @@ func (sql *SqliteDb) Close() error {
 		}
 	}
 
-	if sql.mainRead != nil {
-		if err := sql.mainRead.Close(); err != nil {
+	if sql.read != nil {
+		if err := sql.read.Close(); err != nil {
 			return err
 		}
 	}

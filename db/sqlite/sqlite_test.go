@@ -30,7 +30,7 @@ func TestBuildSqlite(t *testing.T) {
 	since := time.Now()
 
 	require.NoError(t, err)
-	conn := sql.writeDb.treeWrite
+	conn := sql.write.treeWrite
 
 	err = conn.Exec("CREATE TABLE node (seq INTEGER, version INTEGER, hash BLOB, key BLOB, height INTEGER, size INTEGER, l_seq INTEGER, l_version INTEGER, r_seq INTEGER, r_version INTEGER)")
 	require.NoError(t, err)

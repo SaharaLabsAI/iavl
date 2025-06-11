@@ -21,7 +21,7 @@ const defaultWriteBatchSize = 200_000
 type WriteBatch struct {
 	updates *db.DirtyNodes
 
-	sql     *WriteDB
+	conn    *WriteConn
 	size    int64
 	logger  logger.Logger
 	metrics metrics.Proxy
@@ -38,7 +38,7 @@ type WriteBatch struct {
 }
 
 func (b *WriteBatch) newChangeLogBatch() (err error) {
-	if err = b.sql.leafWrite.Begin(); err != nil {
+	if err = b.conn.leafWrite.Begin(); err != nil {
 		return err
 	}
 
@@ -56,7 +56,7 @@ func (b *WriteBatch) changelogMaybeCommit() (err error) {
 }
 
 func (b *WriteBatch) changelogBatchCommitBegin() error {
-	return b.sql.leafWrite.Exec("Commit; Begin")
+	return b.conn.leafWrite.Exec("Commit; Begin")
 }
 
 func (b *WriteBatch) execBranchOrphan(nodeKey inode.NodeKey) error {
@@ -64,7 +64,7 @@ func (b *WriteBatch) execBranchOrphan(nodeKey inode.NodeKey) error {
 }
 
 func (b *WriteBatch) newTreeBatch() (err error) {
-	if err = b.sql.treeWrite.Begin(); err != nil {
+	if err = b.conn.treeWrite.Begin(); err != nil {
 		return err
 	}
 
@@ -73,7 +73,7 @@ func (b *WriteBatch) newTreeBatch() (err error) {
 }
 
 func (b *WriteBatch) treeBatchCommitBegin() error {
-	if err := b.sql.treeWrite.Exec("Commit; Begin"); err != nil {
+	if err := b.conn.treeWrite.Exec("Commit; Begin"); err != nil {
 		return err
 	}
 
@@ -101,8 +101,8 @@ func (b *WriteBatch) treeMaybeCommit() (err error) {
 }
 
 func (b *WriteBatch) saveLeaves() (int64, error) {
-	b.leafInsert = b.sql.leafInsert
-	b.leafOrphan = b.sql.leafOrphan
+	b.leafInsert = b.conn.leafInsert
+	b.leafOrphan = b.conn.leafOrphan
 	b.leafCount = 0
 
 	err := b.newChangeLogBatch()
@@ -166,11 +166,11 @@ func (b *WriteBatch) saveLeaves() (int64, error) {
 		return 0, err
 	}
 
-	if err = b.sql.leafWrite.Commit(); err != nil {
+	if err = b.conn.leafWrite.Commit(); err != nil {
 		return 0, err
 	}
 
-	err = b.sql.leafWrite.Exec("CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);")
+	err = b.conn.leafWrite.Exec("CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);")
 	if err != nil {
 		return b.leafCount, err
 	}
@@ -179,12 +179,12 @@ func (b *WriteBatch) saveLeaves() (int64, error) {
 }
 
 func (b *WriteBatch) saveBranches() (n int64, err error) {
-	b.treeInsert = b.sql.treeInsert
-	b.treeOrphan = b.sql.treeOrphan
+	b.treeInsert = b.conn.treeInsert
+	b.treeOrphan = b.conn.treeOrphan
 	b.treeCount = 0
 
 	shardID := ToShardID(b.updates.Version)
-	if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
+	if err := b.treeInsert.EnsureShardTable(b.conn, shardID); err != nil {
 		return 0, err
 	}
 
@@ -211,7 +211,7 @@ func (b *WriteBatch) saveBranches() (n int64, err error) {
 		b.treeCount++
 
 		shardID := ToShardID(branch.Version())
-		if err := b.treeInsert.EnsureShardTable(b.sql, shardID); err != nil {
+		if err := b.treeInsert.EnsureShardTable(b.conn, shardID); err != nil {
 			return 0, err
 		}
 
@@ -248,7 +248,7 @@ func (b *WriteBatch) saveBranches() (n int64, err error) {
 		return 0, err
 	}
 
-	if err = b.sql.treeWrite.Commit(); err != nil {
+	if err = b.conn.treeWrite.Commit(); err != nil {
 		return 0, err
 	}
 

@@ -38,7 +38,7 @@ type saveResult struct {
 }
 
 type WriteEventLoop struct {
-	sql     *WriteDB
+	conn    *WriteConn
 	logger  logger.Logger
 	metrics metrics.Proxy
 
@@ -57,11 +57,11 @@ type WriteEventLoop struct {
 	leafStopCh chan struct{}
 }
 
-func NewWriteEventLoop(sql *WriteDB, logger logger.Logger, metrics metrics.Proxy) (*WriteEventLoop, context.CancelFunc) {
+func NewWriteEventLoop(sql *WriteConn, logger logger.Logger, metrics metrics.Proxy) (*WriteEventLoop, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	writer := &WriteEventLoop{
-		sql:         sql,
+		conn:        sql,
 		logger:      logger,
 		metrics:     metrics,
 		leafPruneCh: make(chan *pruneSignal),
@@ -84,10 +84,10 @@ func (w *WriteEventLoop) SaveTree(root *inode.Node, version int64, updates *db.D
 	defer w.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "db_write")
 
 	batch := &WriteBatch{
-		sql:     w.sql,
+		conn:    w.conn,
 		updates: updates,
 		size:    defaultWriteBatchSize,
-		logger:  w.sql.logger,
+		logger:  w.conn.logger,
 		metrics: w.metrics,
 		// logger: log.With().
 		// 	Str("module", "sqlite-batch").
@@ -184,27 +184,27 @@ func (w *WriteEventLoop) leafLoop(ctx context.Context) error {
 
 	beginPruneBatch := func(pruneTo int64) error {
 		if orphanQuery == nil {
-			orphanQuery, err = w.sql.leafWrite.Prepare(`SELECT version, sequence, at FROM leaf_orphan WHERE at <= ?`)
+			orphanQuery, err = w.conn.leafWrite.Prepare(`SELECT version, sequence, at FROM leaf_orphan WHERE at <= ?`)
 			if err != nil {
 				return fmt.Errorf("failed to prepare leaf orphan query; %w", err)
 			}
 		}
 
 		if deleteOrphan == nil {
-			deleteOrphan, err = w.sql.leafWrite.Prepare("DELETE FROM leaf_orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
+			deleteOrphan, err = w.conn.leafWrite.Prepare("DELETE FROM leaf_orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
 			if err != nil {
 				return fmt.Errorf("failed to prepare leaf orphan delete; %w", err)
 			}
 		}
 
 		if deleteLeaf == nil {
-			deleteLeaf, err = w.sql.leafWrite.Prepare("DELETE FROM leaf WHERE version = ? and sequence = ? LIMIT 1")
+			deleteLeaf, err = w.conn.leafWrite.Prepare("DELETE FROM leaf WHERE version = ? and sequence = ? LIMIT 1")
 			if err != nil {
 				return fmt.Errorf("failed to prepare leaf delete; %w", err)
 			}
 		}
 
-		if err = w.sql.leafWrite.Begin(); err != nil {
+		if err = w.conn.leafWrite.Begin(); err != nil {
 			return fmt.Errorf("failed to begin leaf prune tx; %w", err)
 		}
 		if err = orphanQuery.Bind(pruneTo); err != nil {
@@ -229,12 +229,12 @@ func (w *WriteEventLoop) leafLoop(ctx context.Context) error {
 			return err
 		}
 
-		if err = w.sql.leafWrite.Commit(); err != nil {
+		if err = w.conn.leafWrite.Commit(); err != nil {
 			return err
 		}
 
 		w.logger.Debug(fmt.Sprintf("commit leaf prune count=%s", humanize.Comma(pruneCount)))
-		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
+		if err = w.conn.leafWrite.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
 			return fmt.Errorf("failed to checkpoint; %w", err)
 		}
 
@@ -313,11 +313,11 @@ func (w *WriteEventLoop) leafLoop(ctx context.Context) error {
 		res := &saveResult{}
 		res.n, res.err = sig.batch.saveLeaves()
 
-		if err = w.sql.leafWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		if err = w.conn.leafWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			w.logger.Error("failed leaf wal_checkpoint", "error", err)
 		}
 
-		if err := w.sql.leafWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {
+		if err := w.conn.leafWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {
 			w.logger.Error("failed leaf incremental vacuum", "error", err)
 		}
 
@@ -411,30 +411,30 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 
 	beginPruneBatch := func(version int64) (err error) {
 		if orphanQuery == nil {
-			orphanQuery, err = w.sql.treeWrite.Prepare("SELECT version, sequence, at FROM branch_orphan WHERE at <= ?")
+			orphanQuery, err = w.conn.treeWrite.Prepare("SELECT version, sequence, at FROM branch_orphan WHERE at <= ?")
 			if err != nil {
 				return fmt.Errorf("failed to prepare orphan query; %w", err)
 			}
 		}
 
 		if deleteBranch == nil {
-			deleteBranch, err = PrepareBranchShardDelete(w.sql, w.sql.branchShards)
+			deleteBranch, err = PrepareBranchShardDelete(w.conn, w.conn.branchShards)
 			if err != nil {
 				return fmt.Errorf("failed to prepare branch delete; %w", err)
 			}
 		}
-		if err := deleteBranch.PrepareVersion(w.sql, version); err != nil {
+		if err := deleteBranch.PrepareVersion(w.conn, version); err != nil {
 			return err
 		}
 
 		if deleteOrphan == nil {
-			deleteOrphan, err = w.sql.treeWrite.Prepare("DELETE FROM branch_orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
+			deleteOrphan, err = w.conn.treeWrite.Prepare("DELETE FROM branch_orphan WHERE at = ? AND version = ? AND sequence = ? LIMIT 1")
 			if err != nil {
 				return fmt.Errorf("failed to prepare orphan delete; %w", err)
 			}
 		}
 
-		if err = w.sql.treeWrite.Begin(); err != nil {
+		if err = w.conn.treeWrite.Begin(); err != nil {
 			return err
 		}
 
@@ -449,7 +449,7 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 			return err
 		}
 
-		if err = w.sql.treeWrite.Commit(); err != nil {
+		if err = w.conn.treeWrite.Commit(); err != nil {
 			return err
 		}
 
@@ -500,7 +500,7 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if err := deleteBranch.PrepareVersion(w.sql, version); err != nil {
+			if err := deleteBranch.PrepareVersion(w.conn, version); err != nil {
 				shardID := ToShardID(version)
 				return fmt.Errorf("failed to prepare delete from tree_%d count=%d; %w", shardID, pruneCount, err)
 			}
@@ -524,12 +524,12 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 				return err
 			}
 
-			if err = w.sql.treeWrite.Exec("DELETE FROM root WHERE version <= ?", pruneVersion); err != nil {
+			if err = w.conn.treeWrite.Exec("DELETE FROM root WHERE version <= ?", pruneVersion); err != nil {
 				return err
 			}
 
 			w.logger.Debug(fmt.Sprintf("commit tree prune count=%s", humanize.Comma(pruneCount)))
-			if err = w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
+			if err = w.conn.treeWrite.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
 				return fmt.Errorf("failed to checkpoint; %w", err)
 			}
 
@@ -564,16 +564,16 @@ func (w *WriteEventLoop) treeLoop(ctx context.Context) error {
 			return
 		}
 
-		if err := w.sql.SaveRoot(sig.version, sig.root); err != nil {
-			res.err = fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.version, err)
+		if err := w.conn.SaveRoot(sig.version, sig.root); err != nil {
+			res.err = fmt.Errorf("failed to save root path=%s version=%d: %w", w.conn.opts.Path, sig.version, err)
 			return
 		}
 
-		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		if err := w.conn.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			w.logger.Error("failed tree wal_checkpoint", "error", err)
 		}
 
-		if err := w.sql.treeWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {
+		if err := w.conn.treeWrite.Exec(fmt.Sprintf("PRAGMA incremental_vacuum(%d)", defaultIncrementalVacuum)); err != nil {
 			w.logger.Error("failed tree incremental vacuum", "error", err)
 		}
 	}

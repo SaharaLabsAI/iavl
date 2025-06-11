@@ -9,7 +9,7 @@ import (
 	"github.com/cosmos/iavl/v2/common/constants"
 )
 
-func runQuickCheck(sql *WriteDB) error {
+func runQuickCheck(sql *WriteConn) error {
 	start := time.Now()
 	defer func() {
 		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_quick_check")

@@ -12,7 +12,7 @@ func (tree *Tree) WarmLeaves() error {
 		return fmt.Errorf("WarmLeaves only support SQLITE")
 	}
 
-	sql := tree.db.(*sqlite.SqliteDb)
+	sql := tree.db.(*sqlite.DB)
 
 	return sql.WarmLeaves()
 }
@@ -23,7 +23,7 @@ func (tree *Tree) IteratorLatestLeaves(version int64, limit int) (Iterator, erro
 	}
 
 	db := tree.db.Readonly()
-	sql := db.(*sqlite.SqliteDb)
+	sql := db.(*sqlite.DB)
 
 	return sql.GetLatestLeavesIterator(version, limit)
 }

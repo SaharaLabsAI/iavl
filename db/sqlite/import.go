@@ -8,7 +8,7 @@ import (
 	"github.com/cosmos/iavl/v2/db"
 )
 
-func (sql *SqliteDb) PrepareImport() error {
+func (sql *DB) PrepareImport() error {
 	err := sql.write.treeWrite.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 10*1024*1024*1024)) // 8G
 	if err != nil {
 		return err
@@ -30,7 +30,7 @@ func (sql *SqliteDb) PrepareImport() error {
 	return nil
 }
 
-func (sql *SqliteDb) FinishImport() error {
+func (sql *DB) FinishImport() error {
 	err := sql.write.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 	if err != nil {
 		return fmt.Errorf("failed tree checkpoint; %w", err)
@@ -59,7 +59,7 @@ func (sql *SqliteDb) FinishImport() error {
 	return nil
 }
 
-func (sql *SqliteDb) WriteBatch(importedNodes *db.DirtyNodes) error {
+func (sql *DB) WriteBatch(importedNodes *db.DirtyNodes) error {
 	size := len(importedNodes.Leaves) + len(importedNodes.Branches)
 	if size == 0 {
 		size = defaultWriteBatchSize

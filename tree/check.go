@@ -55,7 +55,7 @@ func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
 
 	pool := nodepool.NewNodePool()
 	db := tree.db.Readonly()
-	sql := db.(*sqlite.SqliteDb)
+	sql := db.(*sqlite.DB)
 
 	itr := &WrongBranchHashIterator{
 		sql:      sql,
@@ -82,7 +82,7 @@ func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
 }
 
 type WrongBranchHashIterator struct {
-	sql      *sqlite.SqliteDb
+	sql      *sqlite.DB
 	nodePool *nodepool.NodePool
 	itrStmt  *gosqlite.Stmt
 	valid    bool

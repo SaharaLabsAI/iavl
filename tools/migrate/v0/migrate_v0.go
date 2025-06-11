@@ -319,7 +319,7 @@ func allCommand() *cobra.Command {
 						wg.Done()
 						return
 					}
-					sql, err := iavlv2.NewSqliteDb(iavlv2.NewNodePool(),
+					sql, err := iavlv2.NewDB(iavlv2.NewNodePool(),
 						iavlv2.Options{
 							Path:    fmt.Sprintf("%s/%s", dbv2, sk),
 							WalSize: 1024 * 1024 * 1024,

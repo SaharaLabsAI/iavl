@@ -17,7 +17,7 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-type SqliteDb struct {
+type DB struct {
 	opts Options
 
 	write       *WriteConn
@@ -36,16 +36,16 @@ type SqliteDb struct {
 	logger  logger.Logger
 }
 
-func NewInMemorySqliteDb() (*SqliteDb, error) {
+func NewInMemoryDB() (*DB, error) {
 	opts := defaultOptions(Options{ConnArgs: "mode=memory&cache=shared"})
-	return NewSqliteDb(opts)
+	return NewDB(opts)
 }
 
-func NewSqliteDb(opts Options) (*SqliteDb, error) {
+func NewDB(opts Options) (*DB, error) {
 	var err error
 	opts = defaultOptions(opts)
 
-	sql := &SqliteDb{
+	sql := &DB{
 		opts:    opts,
 		metrics: opts.Metrics,
 		logger:  opts.Logger,
@@ -88,8 +88,8 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 	return sql, nil
 }
 
-func (sql *SqliteDb) Readonly() db.ReadonlyDB {
-	return &SqliteDb{
+func (sql *DB) Readonly() db.ReadonlyDB {
+	return &DB{
 		opts:     sql.opts,
 		readPool: sql.readPool,
 		metrics:  sql.metrics,
@@ -97,23 +97,23 @@ func (sql *SqliteDb) Readonly() db.ReadonlyDB {
 	}
 }
 
-func (sql *SqliteDb) isReadonlyDB() bool {
+func (sql *DB) isReadonlyDB() bool {
 	return sql.write == nil
 }
 
-func (sql *SqliteDb) Path() string {
+func (sql *DB) Path() string {
 	return sql.opts.Path
 }
 
-func (sql *SqliteDb) Type() db.Type {
+func (sql *DB) Type() db.Type {
 	return db.SQLITE
 }
 
-func (sql *SqliteDb) LatestVersion() (int64, error) {
+func (sql *DB) LatestVersion() (int64, error) {
 	return latestVersion(sql.opts)
 }
 
-func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
+func (sql *DB) HasRoot(version int64) (bool, error) {
 	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return false, err
@@ -137,7 +137,7 @@ func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
 	return true, nil
 }
 
-func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inode.Node, error) {
+func (sql *DB) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inode.Node, error) {
 	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
 		return nil, err
@@ -180,11 +180,11 @@ func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inod
 	return root, nil
 }
 
-func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
+func (sql *DB) GetConn() (db.ReadConn, error) {
 	return sql.hashPool.getConn()
 }
 
-func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
+func (sql *DB) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
 	// Fallback to old method for backward compatibility
 	start := time.Now()
 	defer func() {
@@ -205,7 +205,7 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 	return conn.GetNode(nodePool, nodekey)
 }
 
-func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
+func (sql *DB) GetValue(key []byte, version int64) ([]byte, error) {
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
@@ -214,7 +214,7 @@ func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
 	return conn.GetValue(version, key)
 }
 
-func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.DirtyNodes) error {
+func (sql *DB) SaveTree(version int64, root *inode.Node, updates *db.DirtyNodes) error {
 	sql.readPool.SetSavingTree()
 	defer sql.readPool.UnsetSavingTree()
 
@@ -229,21 +229,21 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 	return nil
 }
 
-func (sql *SqliteDb) Revert(toVersion int64) error {
+func (sql *DB) Revert(toVersion int64) error {
 	return sql.write.Revert(toVersion)
 }
 
-func (sql *SqliteDb) PausePruning(pause bool) {
+func (sql *DB) PausePruning(pause bool) {
 	sql.writeEv.pausePruning.Store(pause)
 }
 
-func (sql *SqliteDb) DeleteVersionsTo(toVersion int64) error {
+func (sql *DB) DeleteVersionsTo(toVersion int64) error {
 	sql.writeEv.treePruneCh <- &pruneSignal{pruneVersion: toVersion}
 	sql.writeEv.leafPruneCh <- &pruneSignal{pruneVersion: toVersion}
 	return nil
 }
 
-func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
+func (sql *DB) DeleteVersionsToSync(toVersion int64) error {
 	sql.writeEv.awaitTreePruned = make(chan struct{})
 
 	err := sql.DeleteVersionsTo(toVersion)
@@ -256,7 +256,7 @@ func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
 	return nil
 }
 
-func (sql *SqliteDb) Close() error {
+func (sql *DB) Close() error {
 	if sql.isReadonlyDB() {
 		// Readonly DB, nothing to close
 		return nil
@@ -294,7 +294,7 @@ func (sql *SqliteDb) Close() error {
 	return nil
 }
 
-func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
+func (sql *DB) getReadConn() (*ReadConn, error) {
 	if sql.isReadonlyDB() {
 		return sql.readPool.GetConn()
 	}
@@ -343,7 +343,7 @@ func latestVersion(opts Options) (version int64, err error) {
 
 // FIXME:
 // TODO:
-// func (sql *SqliteDb) replayChangelog(tree *Tree, toVersion int64, targetHash []byte) error {
+// func (sql *DB) replayChangelog(tree *Tree, toVersion int64, targetHash []byte) error {
 // 	var (
 // 		version     int
 // 		lastVersion int

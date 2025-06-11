@@ -17,7 +17,7 @@ package rollback
 // 			}
 // 			for _, dbPath := range dbPaths {
 // 				log.Info(fmt.Sprintf("revert db %s to version %d", dbPath, version))
-// 				sql, err := iavl.NewSqliteDb(iavl.NewNodePool(), iavl.Options{Path: dbPath})
+// 				sql, err := iavl.NewDB(iavl.NewNodePool(), iavl.Options{Path: dbPath})
 // 				if err != nil {
 // 					return err
 // 				}

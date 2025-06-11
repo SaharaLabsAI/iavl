@@ -6,7 +6,7 @@ import (
 	"github.com/eatonphil/gosqlite"
 )
 
-func (sql *SqliteDb) GetHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
+func (sql *DB) GetHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
 	fromShardID := ToShardID(start)
 	toShardID := ToShardID(end)
 	if fromShardID != toShardID {
@@ -33,6 +33,6 @@ func (sql *SqliteDb) GetHeightOneBranchesIteratorQuery(start, end int64) (stmt *
 	return stmt, err
 }
 
-func (sql *SqliteDb) GetLatestLeavesIterator(version int64, limit int) (*KVIterator, error) {
+func (sql *DB) GetLatestLeavesIterator(version int64, limit int) (*KVIterator, error) {
 	return sql.readPool.getLatestLeavesIterator(version, limit)
 }

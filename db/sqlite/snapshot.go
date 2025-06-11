@@ -29,7 +29,7 @@ type sqliteSnapshot struct {
 
 	snapshotInsert *gosqlite.Stmt
 
-	sql        *SqliteDb
+	sql        *DB
 	leafInsert *gosqlite.Stmt
 	treeInsert *gosqlite.Stmt
 
@@ -52,7 +52,7 @@ type ExpectedTree interface {
 	EnsureRightNode(*inode.Node) *inode.Node
 }
 
-func (sql *SqliteDb) Snapshot(ctx context.Context, tree ExpectedTree) error {
+func (sql *DB) Snapshot(ctx context.Context, tree ExpectedTree) error {
 	version := tree.Version()
 	err := sql.write.leafWrite.Exec(
 		fmt.Sprintf("CREATE TABLE snapshot_%d (ordinal int, version int, sequence int, bytes blob);", version))
@@ -261,7 +261,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 	return root, nil
 }
 
-func (sql *SqliteDb) WriteSnapshot(
+func (sql *DB) WriteSnapshot(
 	ctx context.Context, version int64, nextFn func() (*SnapshotNode, error), opts SnapshotOptions,
 ) (*inode.Node, error) {
 	snap := &sqliteSnapshot{
@@ -329,7 +329,7 @@ type SnapshotNode struct {
 	Height  int8
 }
 
-func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder constants.TraverseOrderType, loadLeaves bool, nodePool *nodepool.NodePool) (*inode.Node, error) {
+func (sql *DB) ImportSnapshotFromTable(version int64, traverseOrder constants.TraverseOrderType, loadLeaves bool, nodePool *nodepool.NodePool) (*inode.Node, error) {
 	read, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
@@ -384,7 +384,7 @@ func (sql *SqliteDb) ImportSnapshotFromTable(version int64, traverseOrder consta
 	return root, nil
 }
 
-func (sql *SqliteDb) ImportMostRecentSnapshot(targetVersion int64, traverseOrder constants.TraverseOrderType, loadLeaves bool, nodePool *nodepool.NodePool) (*inode.Node, int64, error) {
+func (sql *DB) ImportMostRecentSnapshot(targetVersion int64, traverseOrder constants.TraverseOrderType, loadLeaves bool, nodePool *nodepool.NodePool) (*inode.Node, int64, error) {
 	read, err := sql.getReadConn()
 	if err != nil {
 		return nil, 0, err

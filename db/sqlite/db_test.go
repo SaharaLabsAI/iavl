@@ -18,7 +18,7 @@ func TestBuildSqlite(t *testing.T) {
 	dir := t.TempDir()
 	t.Logf("dir: %s", dir)
 
-	sql, err := NewSqliteDb(Options{Path: dir})
+	sql, err := NewDB(Options{Path: dir})
 
 	require.NoError(t, err)
 
@@ -149,9 +149,9 @@ func TestMmap(t *testing.T) {
 	t.Logf("res: %s\n", res)
 }
 
-func Test_NewSqliteDb(t *testing.T) {
+func Test_NewDB(t *testing.T) {
 	dir := t.TempDir()
-	sql, err := NewSqliteDb(Options{Path: dir})
+	sql, err := NewDB(Options{Path: dir})
 	require.NoError(t, err)
 	require.NotNil(t, sql)
 }

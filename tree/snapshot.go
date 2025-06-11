@@ -14,7 +14,7 @@ func (tree *Tree) LoadSnapshot(version int64, traverseOrder constants.TraverseOr
 	if tree.db.Type() != db.SQLITE {
 		return fmt.Errorf("LoadSnapshot only support SQLITE")
 	}
-	sql := tree.db.(*sqlite.SqliteDb)
+	sql := tree.db.(*sqlite.DB)
 
 	tree.rw.Lock()
 	defer tree.rw.Unlock()
@@ -40,7 +40,7 @@ func (tree *Tree) SaveSnapshot() (err error) {
 	if tree.db.Type() != db.SQLITE {
 		return fmt.Errorf("LoadSnapshot only support SQLITE")
 	}
-	sql := tree.db.(*sqlite.SqliteDb)
+	sql := tree.db.(*sqlite.DB)
 
 	tree.rw.RLock()
 	defer tree.rw.RUnlock()

@@ -78,8 +78,8 @@ func Test_TreeSanity(t *testing.T) {
 			treeFn: func() *itree.Tree {
 				pool := nodepool.NewNodePool()
 				dbPath := t.TempDir()
-				sql, err := sqlite.NewSqliteDb(sqlite.Options{Path: dbPath})
-				// sql, err := NewInMemorySqliteDb(pool)
+				sql, err := sqlite.NewDB(sqlite.Options{Path: dbPath})
+				// sql, err := NewInMemoryDB(pool)
 				require.NoError(t, err)
 				return itree.NewTree(sql, pool, itree.DefaultOptions())
 			},
@@ -146,7 +146,7 @@ func Test_TreeSanity(t *testing.T) {
 func Test_EmptyTree(t *testing.T) {
 	pool := nodepool.NewNodePool()
 	dbPath := t.TempDir()
-	sql, err := sqlite.NewSqliteDb(sqlite.Options{Path: dbPath})
+	sql, err := sqlite.NewDB(sqlite.Options{Path: dbPath})
 	require.NoError(t, err)
 	tree := itree.NewTree(sql, pool, itree.DefaultOptions())
 
@@ -197,7 +197,7 @@ func Test_Replay(t *testing.T) {
 
 	pool := nodepool.NewNodePool()
 	tmpDir := t.TempDir()
-	sql, err := sqlite.NewSqliteDb(sqlite.Options{Path: tmpDir})
+	sql, err := sqlite.NewDB(sqlite.Options{Path: tmpDir})
 	require.NoError(t, err)
 	opts := itree.DefaultOptions()
 	tree := itree.NewTree(sql, pool, opts)
@@ -257,7 +257,7 @@ func Test_Replay(t *testing.T) {
 
 	ingest(1, 150)
 
-	sql, err = sqlite.NewSqliteDb(sqlite.Options{Path: tmpDir})
+	sql, err = sqlite.NewDB(sqlite.Options{Path: tmpDir})
 	require.NoError(t, err)
 	tree = itree.NewTree(sql, pool, opts)
 	err = tree.LoadVersion(140)
@@ -266,7 +266,7 @@ func Test_Replay(t *testing.T) {
 	require.NoError(t, err)
 	ingest(141, 170)
 
-	sql, err = sqlite.NewSqliteDb(sqlite.Options{Path: tmpDir})
+	sql, err = sqlite.NewDB(sqlite.Options{Path: tmpDir})
 	require.NoError(t, err)
 	tree = itree.NewTree(sql, pool, opts)
 	err = tree.LoadVersion(170)
@@ -296,7 +296,7 @@ func Test_PruneLogic(t *testing.T) {
 
 	pool := nodepool.NewNodePool()
 	tmpDir := t.TempDir()
-	sql, err := sqlite.NewSqliteDb(sqlite.Options{Path: tmpDir, ShardTrees: false, Logger: logger.NewDebugLogger()})
+	sql, err := sqlite.NewDB(sqlite.Options{Path: tmpDir, ShardTrees: false, Logger: logger.NewDebugLogger()})
 	require.NoError(t, err)
 	treeOpts := itree.DefaultOptions()
 	tree := itree.NewTree(sql, pool, treeOpts)

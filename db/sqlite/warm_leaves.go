@@ -9,7 +9,7 @@ import (
 
 const defaultWarmLeafSize = 100_0000
 
-func (sql *SqliteDb) WarmLeaves() error {
+func (sql *DB) WarmLeaves() error {
 	start := time.Now()
 
 	conn, err := sql.getReadConn()

@@ -9,6 +9,7 @@ import (
 	"github.com/cosmos/iavl/v2/db/sqlite"
 )
 
+// DB snapshot not cosmos sdk state snapshot
 func (tree *Tree) LoadSnapshot(version int64, traverseOrder constants.TraverseOrderType) (err error) {
 	if tree.db.Type() != db.SQLITE {
 		return fmt.Errorf("LoadSnapshot only support SQLITE")

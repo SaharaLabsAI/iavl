@@ -95,17 +95,6 @@ func (pool *ReadConnPool) Close() error {
 	return pool.conns.close()
 }
 
-func (pool *ReadConnPool) ResetShardQueries() {
-	// disable now because we don't enable sharding
-
-	// pool.mu.Lock()
-	// defer pool.mu.Unlock()
-	//
-	// for _, conn := range pool.conns {
-	// 	conn.SetPendingResetShard()
-	// }
-}
-
 func (pool *ReadConnPool) CloseKVIterstor(idx int) error {
 	return pool.iters.closeKVIterstor(idx)
 }
@@ -198,7 +187,7 @@ func (c *ConnPool) close() error {
 
 	var lastErr error
 	for _, conn := range c.conns {
-		lastErr = conn.conn.Close()
+		lastErr = conn.Close()
 	}
 
 	c.conns = nil

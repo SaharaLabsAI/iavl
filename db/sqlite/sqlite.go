@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
 	api "github.com/kocubinski/costor-api"
 
@@ -31,12 +29,11 @@ type SqliteDb struct {
 
 	// Separate read conn configuration from main read, typical used by rpc query
 	readPool *ReadConnPool
-	hashPool []*ReadConn
+	// Pool for calculate hash only
+	hashPool *ConnPool
 
 	metrics metrics.Proxy
 	logger  logger.Logger
-
-	rw sync.RWMutex
 }
 
 func NewInMemorySqliteDb() (*SqliteDb, error) {
@@ -82,12 +79,11 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 	// 	return nil, err
 	// }
 
-	sql.hashPool = make([]*ReadConn, 0)
-
 	sql.readPool, err = NewReadConnPool(&opts, opts.MaxPoolSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize read connection pool: %w", err)
 	}
+	sql.hashPool = NewConnPool(&opts, 100, opts.Logger)
 
 	return sql, nil
 }
@@ -101,181 +97,44 @@ func (sql *SqliteDb) Readonly() db.ReadonlyDB {
 	}
 }
 
-func (sql *SqliteDb) Type() db.Type {
-	return db.SQLITE
-}
-
-func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.DirtyNodes) error {
-	sql.readPool.SetSavingTree()
-	defer sql.readPool.UnsetSavingTree()
-
-	if updates == nil {
-		return sql.write.SaveRoot(version, root)
-	}
-
-	if err := sql.writeEv.SaveTree(root, version, updates); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (sql *SqliteDb) ReadPool() *ReadConnPool {
-	return sql.readPool
-}
-
-func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
-	conn, err := sql.getReadConn()
-	if err != nil {
-		return nil, err
-	}
-
-	return conn.GetValue(version, key)
-}
-
-func (sql *SqliteDb) LatestVersion() (int64, error) {
-	return latestVersion(sql.opts)
+func (sql *SqliteDb) isReadonlyDB() bool {
+	return sql.write == nil
 }
 
 func (sql *SqliteDb) Path() string {
 	return sql.opts.Path
 }
 
-func (sql *SqliteDb) Revert(toVersion int64) error {
-	return sql.write.Revert(toVersion)
+func (sql *SqliteDb) Type() db.Type {
+	return db.SQLITE
 }
 
-func (sql *SqliteDb) PausePruning(pause bool) {
-	sql.writeEv.pausePruning.Store(pause)
+func (sql *SqliteDb) LatestVersion() (int64, error) {
+	return latestVersion(sql.opts)
 }
 
-func (sql *SqliteDb) DeleteVersionsTo(toVersion int64) error {
-	sql.writeEv.treePruneCh <- &pruneSignal{pruneVersion: toVersion}
-	sql.writeEv.leafPruneCh <- &pruneSignal{pruneVersion: toVersion}
-	return nil
-}
-
-func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
-	sql.writeEv.awaitTreePruned = make(chan struct{})
-
-	err := sql.DeleteVersionsTo(toVersion)
+func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
+	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
-		sql.writeEv.awaitTreePruned = nil
-		return err
+		return false, err
 	}
+	defer conn.Close()
 
-	<-sql.writeEv.awaitTreePruned
-	return nil
-}
-
-func (sql *SqliteDb) isReadonlyDB() bool {
-	return sql.write == nil
-}
-
-func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
-	if sql.isReadonlyDB() {
-		return sql.readPool.GetConn()
-	}
-
-	var err error
-	if sql.read == nil {
-		sql.read, err = NewMainReadConn(&sql.opts, sql.logger)
-	}
-
-	return sql.read, err
-}
-
-func (sql *SqliteDb) newHashConnection() (*ReadConn, error) {
-	return NewReadConn(&sql.opts, sql.logger)
-}
-
-func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
-	sql.rw.Lock()
-	defer sql.rw.Unlock()
-
-	for _, conn := range sql.hashPool {
-		if conn.IsBusy() {
-			continue
-		}
-
-		conn.SetBusy()
-		return conn, nil
-	}
-
-	conn, err := sql.newHashConnection()
+	rootQuery, err := conn.Prepare(StmtQueryVersion, version)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
+	defer rootQuery.Close()
 
-	conn.SetBusy()
-	sql.hashPool = append(sql.hashPool, conn)
-
-	return conn, nil
-}
-
-func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
-	// Fallback to old method for backward compatibility
-	start := time.Now()
-	defer func() {
-		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get_node")
-
-		target := "db_get_branch"
-		if constants.IsLeafSeq(nodekey.Sequence()) {
-			target = "db_get_leaf"
-		}
-		sql.metrics.IncrCounter(1, constants.MetricsNamespace, target)
-	}()
-
-	conn, err := sql.getReadConn()
+	hasRow, err := rootQuery.Step()
+	if !hasRow {
+		return false, nil
+	}
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	return conn.GetNode(nodePool, nodekey)
-}
-
-func (sql *SqliteDb) Close() error {
-	if sql.isReadonlyDB() {
-		// Readonly DB, nothing to close
-		return nil
-	}
-
-	if sql.write != nil {
-		if err := sql.write.Close(); err != nil {
-			return err
-		}
-	}
-
-	if sql.writeCancel != nil {
-		sql.writeCancel()
-		sql.writeEv.awaitStop()
-	}
-
-	if err := sql.closeHangingIterators(); err != nil {
-		return err
-	}
-
-	if sql.readPool != nil {
-		if err := sql.readPool.Close(); err != nil {
-			return err
-		}
-	}
-
-	if sql.hashPool != nil {
-		for _, conn := range sql.hashPool {
-			if err := conn.Close(); err != nil {
-				return err
-			}
-		}
-	}
-
-	if sql.read != nil {
-		if err := sql.read.Close(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return true, nil
 }
 
 func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inode.Node, error) {
@@ -321,68 +180,169 @@ func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inod
 	return root, nil
 }
 
-func (sql *SqliteDb) WarmLeaves() error {
-	start := time.Now()
-
-	var stmt *gosqlite.Stmt
-
-	// Use the connection pool if available
-	if sql.readPool != nil {
-		conn, err := sql.readPool.GetConn()
-		if err != nil {
-			return err
-		}
-		defer conn.SetBusy()
-
-		stmt, err = conn.conn.Prepare("SELECT version, sequence, key_hash, bytes FROM changelog.leaf")
-		if err != nil {
-			return err
-		}
-	} else {
-		read, err := sql.getReadConn()
-		if err != nil {
-			return err
-		}
-
-		stmt, err = read.Prepare("SELECT version, sequence, key_hash, bytes FROM leaf")
-		if err != nil {
-			return err
-		}
-	}
-
-	var (
-		cnt, version, seq int64
-		kz, vz            []byte
-	)
-	for {
-		ok, err := stmt.Step()
-		if err != nil {
-			return err
-		}
-		if !ok {
-			break
-		}
-		cnt++
-		err = stmt.Scan(&version, &seq, &kz, &vz)
-		if err != nil {
-			return err
-		}
-		if cnt%5_000_000 == 0 {
-			sql.logger.Info(fmt.Sprintf("warmed %s leaves", humanize.Comma(cnt)))
-		}
-	}
-
-	sql.logger.Info(fmt.Sprintf("warmed %s leaves in %s", humanize.Comma(cnt), time.Since(start)))
-
-	return stmt.Close()
+func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
+	return sql.hashPool.getConn()
 }
 
-func (sql *SqliteDb) closeHangingIterators() error {
-	if sql.readPool != nil {
-		return sql.readPool.CloseHangingIterators()
+func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
+	// Fallback to old method for backward compatibility
+	start := time.Now()
+	defer func() {
+		sql.metrics.MeasureSince(start, constants.MetricsNamespace, "db_get_node")
+
+		target := "db_get_branch"
+		if constants.IsLeafSeq(nodekey.Sequence()) {
+			target = "db_get_leaf"
+		}
+		sql.metrics.IncrCounter(1, constants.MetricsNamespace, target)
+	}()
+
+	conn, err := sql.getReadConn()
+	if err != nil {
+		return nil, err
+	}
+
+	return conn.GetNode(nodePool, nodekey)
+}
+
+func (sql *SqliteDb) ReadPool() *ReadConnPool {
+	return sql.readPool
+}
+
+func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
+	conn, err := sql.getReadConn()
+	if err != nil {
+		return nil, err
+	}
+
+	return conn.GetValue(version, key)
+}
+
+func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.DirtyNodes) error {
+	sql.readPool.SetSavingTree()
+	defer sql.readPool.UnsetSavingTree()
+
+	if updates == nil {
+		return sql.write.SaveRoot(version, root)
+	}
+
+	if err := sql.writeEv.SaveTree(root, version, updates); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (sql *SqliteDb) Revert(toVersion int64) error {
+	return sql.write.Revert(toVersion)
+}
+
+func (sql *SqliteDb) PausePruning(pause bool) {
+	sql.writeEv.pausePruning.Store(pause)
+}
+
+func (sql *SqliteDb) DeleteVersionsTo(toVersion int64) error {
+	sql.writeEv.treePruneCh <- &pruneSignal{pruneVersion: toVersion}
+	sql.writeEv.leafPruneCh <- &pruneSignal{pruneVersion: toVersion}
+	return nil
+}
+
+func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
+	sql.writeEv.awaitTreePruned = make(chan struct{})
+
+	err := sql.DeleteVersionsTo(toVersion)
+	if err != nil {
+		sql.writeEv.awaitTreePruned = nil
+		return err
+	}
+
+	<-sql.writeEv.awaitTreePruned
+	return nil
+}
+
+func (sql *SqliteDb) Close() error {
+	if sql.isReadonlyDB() {
+		// Readonly DB, nothing to close
+		return nil
+	}
+
+	if sql.writeCancel != nil {
+		sql.writeCancel()
+		sql.writeEv.awaitStop()
+	}
+
+	if sql.write != nil {
+		if err := sql.write.Close(); err != nil {
+			return err
+		}
+	}
+
+	if sql.readPool != nil {
+		if err := sql.readPool.Close(); err != nil {
+			return err
+		}
+	}
+
+	if sql.hashPool != nil {
+		if err := sql.hashPool.close(); err != nil {
+			return err
+		}
+	}
+
+	if sql.read != nil {
+		if err := sql.read.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
+	if sql.isReadonlyDB() {
+		return sql.readPool.GetConn()
+	}
+
+	var err error
+	if sql.read == nil {
+		sql.read, err = NewMainReadConn(&sql.opts, sql.logger)
+	}
+
+	return sql.read, err
+}
+
+func latestVersion(opts Options) (version int64, err error) {
+	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
+
+	err = conn.Exec("PRAGMA immutable=1;")
+	if err != nil {
+		return 0, err
+	}
+
+	rootQuery, err := conn.Prepare("SELECT MAX(version) FROM root LIMIT 1")
+	if err != nil {
+		return 0, err
+	}
+	defer rootQuery.Close()
+
+	hasRow, err := rootQuery.Step()
+	if !hasRow {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	err = rootQuery.Scan(&version)
+	if err != nil {
+		return 0, err
+	}
+
+	return version, nil
 }
 
 // FIXME:
@@ -488,109 +448,3 @@ func (sql *SqliteDb) closeHangingIterators() error {
 // 		tree.version.Load(), humanize.Comma(count), time.Since(start).Round(time.Millisecond), tree.root), logPath)
 // 	return q.Close()
 // }
-
-func (sql *SqliteDb) Logger() logger.Logger {
-	return sql.logger
-}
-
-func DefaultOptions(opts Options) Options {
-	return defaultOptions(opts)
-}
-
-func (sql *SqliteDb) GetAt(version int64, key []byte) ([]byte, error) {
-	if len(key) == 0 {
-		return nil, fmt.Errorf("get value with key length 0")
-	}
-
-	conn, err := sql.getReadConn()
-	if err != nil {
-		return nil, err
-	}
-
-	return conn.GetValue(version, key)
-}
-
-func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
-	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
-	if err != nil {
-		return false, err
-	}
-	defer conn.Close()
-
-	rootQuery, err := conn.Prepare(StmtQueryVersion, version)
-	if err != nil {
-		return false, err
-	}
-	defer rootQuery.Close()
-
-	hasRow, err := rootQuery.Step()
-	if !hasRow {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-func (sql *SqliteDb) GetHeightOneBranchesIteratorQuery(start, end int64) (stmt *gosqlite.Stmt, err error) {
-	fromShardID := ToShardID(start)
-	toShardID := ToShardID(end)
-	if fromShardID != toShardID {
-		return nil, fmt.Errorf("from shard %d to shard %d, cross different branch shards are not support", fromShardID, toShardID)
-	}
-
-	conn, err := sql.getReadConn()
-	if err != nil {
-		return nil, err
-	}
-
-	shardID := ToShardID(start)
-
-	stmt, err = conn.Prepare(
-		fmt.Sprintf("SELECT version, sequence, bytes FROM tree_%d WHERE version >= ? AND version <= ? ORDER BY version ASC", shardID))
-	if err != nil {
-		return nil, err
-	}
-
-	if err = stmt.Bind(start, end); err != nil {
-		return nil, err
-	}
-
-	return stmt, err
-}
-
-func latestVersion(opts Options) (version int64, err error) {
-	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	err = conn.Exec("PRAGMA immutable=1;")
-	if err != nil {
-		return 0, err
-	}
-
-	rootQuery, err := conn.Prepare("SELECT MAX(version) FROM root LIMIT 1")
-	if err != nil {
-		return 0, err
-	}
-	defer rootQuery.Close()
-
-	hasRow, err := rootQuery.Step()
-	if !hasRow {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	err = rootQuery.Scan(&version)
-	if err != nil {
-		return 0, err
-	}
-
-	return version, nil
-}

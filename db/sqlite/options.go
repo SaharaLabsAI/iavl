@@ -59,6 +59,10 @@ type Options struct {
 	OptimizeOnStart bool
 }
 
+func DefaultOptions(opts Options) Options {
+	return defaultOptions(opts)
+}
+
 func getPageSize() int {
 	pageSize := os.Getpagesize()
 
@@ -189,38 +193,4 @@ func (opts Options) EstimateMmapSize() (uint64, error) {
 	opts.Logger.Info(fmt.Sprintf("leaf mmap size: %s", humanize.Bytes(mmapSize)))
 
 	return mmapSize, nil
-}
-
-func (opts Options) latestVersion() (version int64, err error) {
-	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	err = conn.Exec("PRAGMA immutable=1;")
-	if err != nil {
-		return 0, err
-	}
-
-	rootQuery, err := conn.Prepare("SELECT MAX(version) FROM root LIMIT 1")
-	if err != nil {
-		return 0, err
-	}
-	defer rootQuery.Close()
-
-	hasRow, err := rootQuery.Step()
-	if !hasRow {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	err = rootQuery.Scan(&version)
-	if err != nil {
-		return 0, err
-	}
-
-	return version, nil
 }

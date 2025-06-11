@@ -9,8 +9,8 @@ import (
 )
 
 func (tree *Tree) Has(key []byte) (bool, error) {
-	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_has")
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_has")
 	}
 
 	val, err := tree.Get(key)
@@ -22,8 +22,8 @@ func (tree *Tree) Has(key []byte) (bool, error) {
 }
 
 func (tree *Tree) Get(key []byte) ([]byte, error) {
-	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_db_get")
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_db_get")
 	}
 
 	tree.rw.RLock()
@@ -88,8 +88,8 @@ func (tree *Tree) GetByIndex(index int64) (key []byte, value []byte, err error) 
 }
 
 func (tree *Tree) get(node *inode.Node, key []byte) (index int64, value []byte, err error) {
-	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_get")
 	}
 
 	if node.IsLeaf() {

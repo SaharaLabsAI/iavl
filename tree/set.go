@@ -14,8 +14,8 @@ import (
 // to slices stored within IAVL. It returns true when an existing value was
 // updated, while false means it was a new key.
 func (tree *Tree) Set(key, value []byte) (updated bool, err error) {
-	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_set")
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_set")
 	}
 
 	tree.rw.Lock()

@@ -15,7 +15,6 @@ type Tree struct {
 	version atomic.Int64
 	root    *inode.Node
 
-	metrics  metrics.Proxy
 	nodePool *nodepool.NodePool
 
 	// options
@@ -23,7 +22,7 @@ type Tree struct {
 	workingBytes   uint64
 	workingSize    int64
 	heightFilter   int8
-	metricsProxy   metrics.Proxy
+	metrics        metrics.Proxy
 
 	// state
 	db         idb.DB
@@ -49,7 +48,6 @@ func NewTree(db idb.DB, pool *nodepool.NodePool, opts Options) *Tree {
 		metrics:        opts.MetricsProxy,
 		maxWorkingSize: 1.5 * 1024 * 1024 * 1024,
 		heightFilter:   opts.HeightFilter,
-		metricsProxy:   opts.MetricsProxy,
 		leafSequence:   constants.LeafSequenceStart,
 		hashedVersion:  -1,
 		cache:          make(map[string][]byte),

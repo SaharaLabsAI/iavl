@@ -40,8 +40,8 @@ func (tree *Tree) BatchSetRemove(operations []BatchOperation) error {
 		return nil
 	}
 
-	if tree.metricsProxy != nil {
-		defer tree.metricsProxy.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_batch_set_remove_deferred")
+	if tree.metrics != nil {
+		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_batch_set_remove_deferred")
 	}
 
 	tree.rw.Lock()

@@ -410,14 +410,14 @@ func (tree *Tree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err
 		inclusive: inclusive,
 		valid:     itTree.root != nil,
 		stack:     nil, // Will be initialized properly below
-		metrics:   tree.metricsProxy,
+		metrics:   tree.metrics,
 	}
 
 	treeItr := itr.(*LeafIterator)
 	treeItr.initializeIteratorStack(itTree.root)
 
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
 	}
 
 	if itTree.root != nil {
@@ -440,14 +440,14 @@ func (tree *Tree) ReverseIterator(start, end []byte) (itr Iterator, err error) {
 		inclusive: false,
 		valid:     itTree.root != nil,
 		stack:     nil, // Will be initialized properly below
-		metrics:   tree.metricsProxy,
+		metrics:   tree.metrics,
 	}
 
 	treeItr := itr.(*LeafIterator)
 	treeItr.initializeIteratorStack(itTree.root)
 
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
 	}
 
 	if itTree.root != nil {
@@ -475,13 +475,13 @@ func (tree *Tree) IterateRecent(version int64, start, end []byte, ascending bool
 		inclusive: false,
 		valid:     true,
 		stack:     nil, // Will be initialized properly below
-		metrics:   tree.metricsProxy,
+		metrics:   tree.metrics,
 	}
 
 	itr.initializeIteratorStack(itTree.root)
 
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
 	}
 
 	if itTree.root != nil {

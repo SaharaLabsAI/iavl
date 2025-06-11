@@ -124,7 +124,7 @@ func (tree *Tree) IteratorVersionDescLeaves(version int64, limit int) (Iterator,
 	kvItr := &KVIterator{
 		sql:     sql,
 		valid:   true,
-		metrics: tree.metricsProxy,
+		metrics: tree.metrics,
 	}
 
 	kvItr.itrStmt, kvItr.itrIdx, err = sql.ReadPool().GetVersionDescLeafIterator(version, limit)
@@ -132,8 +132,8 @@ func (tree *Tree) IteratorVersionDescLeaves(version int64, limit int) (Iterator,
 		return nil, err
 	}
 
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
 	}
 
 	kvItr.Next()

@@ -63,7 +63,7 @@ func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
 		start:    start,
 		end:      end,
 		valid:    true,
-		metrics:  tree.metricsProxy,
+		metrics:  tree.metrics,
 	}
 
 	var err error
@@ -72,8 +72,8 @@ func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
 		return nil, err
 	}
 
-	if tree.metricsProxy != nil {
-		tree.metricsProxy.IncrCounter(1, "iavl2", "iterator", "open")
+	if tree.metrics != nil {
+		tree.metrics.IncrCounter(1, "iavl2", "iterator", "open")
 	}
 
 	itr.Next()

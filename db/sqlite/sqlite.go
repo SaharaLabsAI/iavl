@@ -120,7 +120,7 @@ func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
 	}
 	defer conn.Close()
 
-	rootQuery, err := conn.Prepare(StmtQueryVersion, version)
+	rootQuery, err := conn.Prepare("SELECT node_version FROM root WHERE version = ? LIMIT 1", version)
 	if err != nil {
 		return false, err
 	}
@@ -144,7 +144,7 @@ func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inod
 	}
 	defer conn.Close()
 
-	rootQuery, err := conn.Prepare(StmtQueryRoot, version)
+	rootQuery, err := conn.Prepare("SELECT node_version, node_sequence, bytes FROM root WHERE version = ? LIMIT 1", version)
 	if err != nil {
 		return nil, err
 	}

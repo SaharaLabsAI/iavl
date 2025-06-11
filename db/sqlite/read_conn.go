@@ -164,7 +164,7 @@ func (c *ReadConn) GetValue(version int64, key []byte) ([]byte, error) {
 
 	var err error
 	if c.queryKV == nil {
-		c.queryKV, err = c.conn.Prepare(StmtQueryKeyValue)
+		c.queryKV, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE key_hash = ? AND version <= ? ORDER BY version DESC LIMIT 1")
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +239,7 @@ func (c *ReadConn) Close() error {
 func (c *ReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
 	var err error
 	if c.queryLeaf == nil {
-		c.queryLeaf, err = c.conn.Prepare(StmtQueryLeaf)
+		c.queryLeaf, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE version = ? AND sequence = ? LIMIT 1")
 		if err != nil {
 			return nil, err
 		}

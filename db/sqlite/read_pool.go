@@ -28,6 +28,7 @@ type ReadConnPool struct {
 	mu sync.RWMutex
 }
 
+// NOTE: This pool is primary used for rpc query
 func NewReadConnPool(opts *Options, MaxPoolSize int) (*ReadConnPool, error) {
 	if MaxPoolSize <= 0 {
 		MaxPoolSize = defaultMaxPoolSize

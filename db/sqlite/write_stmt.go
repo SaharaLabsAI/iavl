@@ -41,26 +41,3 @@ INSERT OR REPLACE INTO leaf (version, sequence, key_hash, bytes) VALUES (?, ?, ?
 const StmtInsertLeafOrphan = `
 INSERT OR REPLACE INTO leaf_orphan (version, sequence, at) VALUES (?, ?, ?)
 `
-
-// Query
-
-const StmtQueryRoot = `
-SELECT node_version, node_sequence, bytes FROM root WHERE version = ? LIMIT 1
-`
-
-const StmtQueryVersion = `
-SELECT node_version FROM root WHERE version = ? LIMIT 1
-`
-
-// NOTE: leaves database is `Attach`-ed to read connection
-const StmtQueryKeyValue = `
-SELECT bytes FROM changelog.leaf WHERE key_hash = ? AND version <= ? ORDER BY version DESC LIMIT 1
-`
-
-const StmtQueryLeaf = `
-SELECT bytes FROM changelog.leaf WHERE version = ? AND sequence = ? LIMIT 1
-`
-
-const StmtQueryBranchShardFormat = `
-SELECT bytes FROM tree_%d WHERE version = ? AND sequence = ? LIMIT 1
-`

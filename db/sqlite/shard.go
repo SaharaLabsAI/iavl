@@ -260,7 +260,7 @@ func (sq *BranchShardQuery) PrepareVersion(c *ReadConn, version int64) error {
 		return nil
 	}
 
-	sqlQuery := fmt.Sprintf("SELECT bytes FROM tree_%d WHERE version = ? AND sequence = ? LIMIT 1", shardID)
+	sqlQuery := fmt.Sprintf(StmtQueryBranchShardFormat, shardID)
 	st, err := c.conn.Prepare(sqlQuery)
 	if err != nil {
 		return err

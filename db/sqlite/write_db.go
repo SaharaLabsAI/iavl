@@ -72,8 +72,11 @@ func (sql *WriteDB) SaveRoot(version int64, node *inode.Node) error {
 		}
 		bz := buf.Bytes()
 
-		err = sql.treeWrite.Exec("INSERT OR REPLACE INTO root(version, node_version, node_sequence, bytes) VALUES (?, ?, ?, ?)",
-			version, node.NodeKey().Version(), int(node.NodeKey().Sequence()), bz)
+		err = sql.treeWrite.Exec(StmtInsertRoot,
+			version,
+			node.NodeKey().Version(),
+			int(node.NodeKey().Sequence()),
+			bz)
 		if err != nil {
 			return err
 		}
@@ -178,8 +181,7 @@ func (sql *WriteDB) createShardTableIfNotExists(shardID int) error {
 	}
 
 	sql.logger.Info(fmt.Sprintf("creating %s shard %d", sql.opts.Path, shardID))
-	return sql.treeWrite.Exec(fmt.Sprintf(
-		"CREATE TABLE tree_%d (version int, sequence int, bytes blob, orphaned bool, PRIMARY KEY (version, sequence)) WITHOUT ROWID;", shardID))
+	return sql.treeWrite.Exec(fmt.Sprintf(StmtCreateTreeBranchShardTableFormat, shardID))
 }
 
 func (sql *WriteDB) createTableIfNotExists() error {
@@ -207,9 +209,7 @@ func (sql *WriteDB) createTableIfNotExists() error {
 			return err
 		}
 
-		err = sql.treeWrite.Exec(`
-CREATE TABLE branch_orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;
-CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob, PRIMARY KEY (version DESC)) WITHOUT ROWID`)
+		err = sql.treeWrite.Exec(StmtCreateTreeTables)
 		if err != nil {
 			return err
 		}
@@ -237,12 +237,7 @@ CREATE TABLE root (version int, node_version int, node_sequence int, bytes blob,
 			return err
 		}
 
-		// NOTE: we need leaf_idx, so we cannot use `WITHOUT ROWID` because leaf_idx must store the full PRIMARY KEY
-		// as their row reference
-		err = sql.leafWrite.Exec(`
-CREATE TABLE leaf (version int, sequence int, key_hash blob, bytes blob, orphaned bool, PRIMARY KEY (key_hash, version DESC));
-CREATE UNIQUE INDEX IF NOT EXISTS leaf_idx ON leaf (version, sequence);
-CREATE TABLE leaf_orphan (version int, sequence int, at int, PRIMARY KEY (at DESC, version, sequence)) WITHOUT ROWID;`)
+		err = sql.leafWrite.Exec(StmtCreateLeafTables)
 		if err != nil {
 			return err
 		}
@@ -359,12 +354,7 @@ func (sql *WriteDB) resetWriteConn() (err error) {
 }
 
 func (sql *WriteDB) preapreBranchShardInsertStatement(shardID int64) (*gosqlite.Stmt, error) {
-	// Every time we mutate node during balance/set/remove, touched branch nodes will always get new node key.
-	// But Test_Replay will try to ingest nodes so we should allow REPLACE here.
-	return sql.treeWrite.Prepare(fmt.Sprintf(
-		"INSERT OR REPLACE INTO tree_%d (version, sequence, bytes) VALUES (?, ?, ?)",
-		shardID,
-	))
+	return sql.treeWrite.Prepare(fmt.Sprintf(StmtInsertBranchShardFormat, shardID))
 }
 
 func (sql *WriteDB) prepareInsertStatements() (err error) {
@@ -373,7 +363,7 @@ func (sql *WriteDB) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.leafInsert, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf (version, sequence, key_hash, bytes) VALUES (?, ?, ?, ?)")
+	sql.leafInsert, err = sql.leafWrite.Prepare(StmtInsertLeaf)
 	if err != nil {
 		return err
 	}
@@ -383,7 +373,7 @@ func (sql *WriteDB) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.leafOrphan, err = sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf_orphan (version, sequence, at) VALUES (?, ?, ?)")
+	sql.leafOrphan, err = sql.leafWrite.Prepare(StmtInsertLeafOrphan)
 	if err != nil {
 		return err
 	}
@@ -393,7 +383,7 @@ func (sql *WriteDB) prepareInsertStatements() (err error) {
 			return err
 		}
 	}
-	sql.treeOrphan, err = sql.treeWrite.Prepare("INSERT OR REPLACE INTO branch_orphan (version, sequence, at) VALUES (?, ?, ?)")
+	sql.treeOrphan, err = sql.treeWrite.Prepare(StmtInsertBranchOrphan)
 	if err != nil {
 		return err
 	}

@@ -16,130 +16,124 @@ import (
 type ReadConn struct {
 	conn *gosqlite.Conn
 
-	treeVersion int64
+	opts   *Options
+	logger logger.Logger
 
-	queryLeaf *gosqlite.Stmt
-	queryKV   *gosqlite.Stmt
-
+	queryLeaf   *gosqlite.Stmt
+	queryKV     *gosqlite.Stmt
 	queryBranch *BranchShardQuery
 
-	opts *Options
-
-	inUse  atomic.Bool
-	logger logger.Logger
+	busy atomic.Bool
 }
 
-func NewReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger) *ReadConn {
-	return &ReadConn{
-		conn:        conn,
-		treeVersion: 0,
-		opts:        opts,
-		logger:      logger,
-	}
-}
-
-func NewSqliteImmutableReadConn(treeVersion int64, opts *Options, logger logger.Logger) *ReadConn {
-	return &ReadConn{
-		treeVersion: treeVersion,
-		opts:        opts,
-		logger:      logger,
-	}
-}
-
-func (c *ReadConn) ResetToTreeVersion(version int64) error {
-	if c.treeVersion >= version {
-		// No need to reset
-		return nil
-	}
-
-	if c.conn != nil {
-		if err := c.Close(); err != nil {
-			return err
-		}
-		c.conn = nil
-	}
-
-	conn, err := gosqlite.Open(c.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
+func NewReadConn(opts *Options, logger logger.Logger) (*ReadConn, error) {
+	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = conn.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS changelog;", c.opts.leafConnectionString(ReadOnly)))
+	err = conn.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS changelog;", opts.leafConnectionString(ReadOnly)))
 	if err != nil {
 		conn.Close()
-		return err
+		return nil, err
 	}
 
 	err = conn.Exec("PRAGMA automatic_index=OFF;")
 	if err != nil {
-		return err
+		conn.Close()
+		return nil, err
 	}
 
 	err = conn.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 0))
 	if err != nil {
 		conn.Close()
-		return err
+		return nil, err
 	}
 
 	err = conn.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", 100))
 	if err != nil {
 		conn.Close()
-		return err
+		return nil, err
 	}
 
-	err = conn.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d;", c.opts.BusyTimeout))
+	err = conn.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d;", opts.BusyTimeout))
 	if err != nil {
-		return err
-	}
-
-	err = conn.Exec("PRAGMA read_uncommitted=OFF;")
-	if err != nil {
-		return err
+		conn.Close()
+		return nil, err
 	}
 
 	err = conn.Exec("PRAGMA query_only=ON;")
 	if err != nil {
-		return err
+		conn.Close()
+		return nil, err
+	}
+
+	err = conn.Exec("PRAGMA read_uncommitted=OFF;")
+	if err != nil {
+		conn.Close()
+		return nil, err
 	}
 
 	// Below configuration may cause issues
-	// err = conn.Exec(fmt.Sprintf("PRAGMA threads=%d;", c.opts.ThreadsCount))
+
+	// err = conn.Exec(fmt.Sprintf("PRAGMA threads=%d;", opts.ThreadsCount))
 	// if err != nil {
+	// conn.Close()
 	// 	return err
 	// }
 
-	// err = conn.Exec(fmt.Sprintf("PRAGMA sqlite_stmt_cache=%d;", c.opts.StatementCache))
+	// err = conn.Exec(fmt.Sprintf("PRAGMA sqlite_stmt_cache=%d;", opts.StatementCache))
 	// if err != nil {
+	// conn.Close()
 	// 	return err
 	// }
 
-	c.conn = conn
+	c := &ReadConn{
+		conn:   conn,
+		opts:   opts,
+		logger: logger,
+	}
 
-	return nil
+	return c, nil
 }
 
-func (c *ReadConn) Prepare(statement string, args ...interface{}) (*gosqlite.Stmt, error) {
+func (c *ReadConn) Prepare(statement string, args ...any) (*gosqlite.Stmt, error) {
 	return c.conn.Prepare(statement, args...)
 }
 
-func (c *ReadConn) getVersioned(version int64, key []byte) ([]byte, error) {
-	defer c.MarkIdle()
+func (c *ReadConn) Exec(stmt string, args ...any) error {
+	defer c.Release()
+
+	return c.conn.Exec(stmt, args...)
+}
+
+func (c *ReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
+	defer c.Release()
+
+	if constants.IsLeafSeq(nodekey.Sequence()) {
+		return c.getLeaf(pool, nodekey)
+	}
+
+	return c.getNode(pool, nodekey)
+}
+
+func (c *ReadConn) GetValue(version int64, key []byte) ([]byte, error) {
+	defer c.Release()
 
 	if len(key) == 0 {
 		return nil, fmt.Errorf("get value with key length 0")
 	}
 
-	keyHash := blake3.Sum256(key)
-
 	var err error
 	if c.queryKV == nil {
-		c.queryKV, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE key_hash = ? AND version <= ? ORDER BY version DESC LIMIT 1")
+		c.queryKV, err = c.conn.Prepare(StmtQueryKeyValue)
 		if err != nil {
 			return nil, err
 		}
 	}
 	defer c.queryKV.Reset()
 
+	keyHash := blake3.Sum256(key)
 	if err = c.queryKV.Bind(keyHash[:], version); err != nil {
 		return nil, err
 	}
@@ -165,28 +159,16 @@ func (c *ReadConn) getVersioned(version int64, key []byte) ([]byte, error) {
 	return inode.DecodeValueOnly(nodeBz)
 }
 
-func (c *ReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
-	if constants.IsLeafSeq(nodekey.Sequence()) {
-		return c.getLeaf(pool, nodekey)
-	}
-
-	return c.getNode(pool, nodekey)
+func (c *ReadConn) IsBusy() bool {
+	return c.busy.Load()
 }
 
-func (c *ReadConn) IsInUse() bool {
-	return c.inUse.Load()
-}
-
-func (c *ReadConn) MarkInUse() {
-	c.inUse.Store(true)
-}
-
-func (c *ReadConn) MarkIdle() {
-	c.inUse.Store(false)
+func (c *ReadConn) SetBusy() {
+	c.busy.Store(true)
 }
 
 func (c *ReadConn) Release() error {
-	c.MarkIdle()
+	c.busy.Store(false)
 
 	return nil
 }
@@ -217,11 +199,9 @@ func (c *ReadConn) Close() error {
 }
 
 func (c *ReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
-	defer c.MarkIdle()
-
 	var err error
 	if c.queryLeaf == nil {
-		c.queryLeaf, err = c.conn.Prepare("SELECT bytes FROM changelog.leaf WHERE version = ? AND sequence = ? LIMIT 1")
+		c.queryLeaf, err = c.conn.Prepare(StmtQueryLeaf)
 		if err != nil {
 			return nil, err
 		}
@@ -255,8 +235,6 @@ func (c *ReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*ino
 }
 
 func (c *ReadConn) getNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*inode.Node, error) {
-	defer c.MarkIdle()
-
 	var err error
 	if c.queryBranch == nil {
 		c.queryBranch = PrepareBranchShardQuery(c)

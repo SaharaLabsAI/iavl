@@ -174,9 +174,8 @@ func (c *ConnPool) getConn(version int64) (*ReadConn, error) {
 	defer c.mu.Unlock()
 
 	for _, conn := range c.conns {
-		if !conn.IsInUse() {
-			conn.MarkInUse()
-			conn.ResetToTreeVersion(version)
+		if !conn.IsBusy() {
+			conn.SetBusy()
 			return conn, nil
 		}
 	}
@@ -185,9 +184,12 @@ func (c *ConnPool) getConn(version int64) (*ReadConn, error) {
 		return nil, fmt.Errorf("service busy, try again later")
 	}
 
-	conn := NewSqliteImmutableReadConn(version, c.opts, c.logger)
-	conn.MarkInUse()
-	conn.ResetToTreeVersion(conn.treeVersion + 1) // Force reset on first connect
+	conn, err := NewReadConn(c.opts, c.logger)
+	if err != nil {
+		return nil, err
+	}
+
+	conn.SetBusy()
 	c.conns = append(c.conns, conn)
 
 	c.logger.Debug(fmt.Sprintf("Created new connection, pool size now: %d", len(c.conns)))
@@ -257,7 +259,7 @@ func (i *IterPool) closeKVIterstor(idx int) error {
 
 	conn, exists := i.kvItrConns[idx]
 	if exists {
-		conn.MarkIdle()
+		conn.Release()
 		delete(i.kvItrConns, idx)
 	}
 
@@ -276,7 +278,7 @@ func (i *IterPool) closeHangingIterators() error {
 		}
 
 		if i.kvItrConns[idx] != nil {
-			i.kvItrConns[idx].MarkIdle()
+			i.kvItrConns[idx].Release()
 			delete(i.kvItrConns, idx)
 		}
 

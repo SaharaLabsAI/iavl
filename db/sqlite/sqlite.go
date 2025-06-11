@@ -132,7 +132,7 @@ func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
 		return nil, err
 	}
 
-	return conn.getVersioned(version, key)
+	return conn.GetValue(version, key)
 }
 
 func (sql *SqliteDb) LatestVersion() (int64, error) {
@@ -175,66 +175,27 @@ func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
 }
 
 func (sql *SqliteDb) newReadConn() (*ReadConn, error) {
-	var (
-		conn *gosqlite.Conn
-		err  error
-	)
-
-	conn, err = gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
+	conn, err := NewReadConn(&sql.opts, sql.logger)
 	if err != nil {
 		return nil, err
 	}
 
-	err = conn.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS changelog;", sql.opts.leafConnectionString(ReadOnly)))
-	if err != nil {
-		return nil, err
-	}
-	err = conn.Exec("PRAGMA automatic_index=OFF;")
-	if err != nil {
-		return nil, err
-	}
-	err = conn.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", sql.opts.MmapSize))
-	if err != nil {
-		return nil, err
-	}
 	err = conn.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", sql.opts.CacheSize))
 	if err != nil {
 		return nil, err
 	}
+
 	err = conn.Exec("PRAGMA temp_store=MEMORY;")
 	if err != nil {
 		return nil, err
 	}
+
 	err = conn.Exec(fmt.Sprintf("PRAGMA temp_store_size=%d;", sql.opts.TempStoreSize))
 	if err != nil {
 		return nil, err
 	}
-	err = conn.Exec("PRAGMA query_only=ON;")
-	if err != nil {
-		return nil, err
-	}
-	err = conn.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d;", sql.opts.BusyTimeout))
-	if err != nil {
-		return nil, err
-	}
 
-	// Below configuration may cause issues
-	// err = conn.Exec(fmt.Sprintf("PRAGMA threads=%d;", sql.opts.ThreadsCount))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// err = conn.Exec(fmt.Sprintf("PRAGMA sqlite_stmt_cache=%d;", sql.opts.StatementCache))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// err = conn.Exec("PRAGMA read_uncommitted=ON;")
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	c := NewReadConn(conn, &sql.opts, sql.logger)
-
-	return c, nil
+	return conn, nil
 }
 
 func (sql *SqliteDb) resetReadConn() (err error) {
@@ -282,50 +243,7 @@ func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
 }
 
 func (sql *SqliteDb) newHashConnection() (*ReadConn, error) {
-	conn, err := gosqlite.Open(sql.opts.treeConnectionString(ReadOnly), openReadOnlyMode)
-	if err != nil {
-		return nil, err
-	}
-
-	err = conn.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS changelog;", sql.opts.leafConnectionString(ReadOnly)))
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	err = conn.Exec("PRAGMA automatic_index=OFF;")
-	if err != nil {
-		return nil, err
-	}
-
-	err = conn.Exec(fmt.Sprintf("PRAGMA mmap_size=%d;", 0))
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	err = conn.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", 100))
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	err = conn.Exec("PRAGMA read_uncommitted=OFF;")
-	if err != nil {
-		return nil, err
-	}
-
-	err = conn.Exec("PRAGMA query_only=ON;")
-	if err != nil {
-		return nil, err
-	}
-
-	return &ReadConn{
-		conn:        conn,
-		treeVersion: 0,
-		opts:        &sql.opts,
-		logger:      sql.logger,
-	}, nil
+	return NewReadConn(&sql.opts, sql.logger)
 }
 
 func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
@@ -333,11 +251,11 @@ func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
 	defer sql.rw.Unlock()
 
 	for _, conn := range sql.hashPool {
-		if conn.IsInUse() {
+		if conn.IsBusy() {
 			continue
 		}
 
-		conn.MarkInUse()
+		conn.SetBusy()
 		return conn, nil
 	}
 
@@ -346,7 +264,7 @@ func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
 		return nil, err
 	}
 
-	conn.MarkInUse()
+	conn.SetBusy()
 	sql.hashPool = append(sql.hashPool, conn)
 
 	return conn, nil
@@ -424,7 +342,7 @@ func (sql *SqliteDb) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inod
 	}
 	defer conn.Close()
 
-	rootQuery, err := conn.Prepare("SELECT node_version, node_sequence, bytes FROM root WHERE version = ? LIMIT 1", version)
+	rootQuery, err := conn.Prepare(StmtQueryRoot, version)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +389,7 @@ func (sql *SqliteDb) WarmLeaves() error {
 		if err != nil {
 			return err
 		}
-		defer conn.MarkIdle()
+		defer conn.SetBusy()
 
 		stmt, err = conn.conn.Prepare("SELECT version, sequence, key_hash, bytes FROM changelog.leaf")
 		if err != nil {
@@ -553,7 +471,7 @@ func (sql *SqliteDb) closeHangingIterators() error {
 // 	if err != nil {
 // 		return err
 // 	}
-// 	defer conn.MarkIdle()
+// 	defer conn.Release()
 //
 // 	q, err = conn.Prepare(`SELECT * FROM (
 // 			SELECT version, sequence, key_hash, bytes
@@ -646,7 +564,7 @@ func (sql *SqliteDb) GetAt(version int64, key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	return conn.getVersioned(version, key)
+	return conn.GetValue(version, key)
 }
 
 func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
@@ -656,7 +574,7 @@ func (sql *SqliteDb) HasRoot(version int64) (bool, error) {
 	}
 	defer conn.Close()
 
-	rootQuery, err := conn.Prepare("SELECT node_version FROM root WHERE version = ? LIMIT 1", version)
+	rootQuery, err := conn.Prepare(StmtQueryVersion, version)
 	if err != nil {
 		return false, err
 	}

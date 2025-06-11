@@ -15,7 +15,7 @@ import (
 
 const defaultSQLitePath = "/tmp/iavl2"
 const defaultMaxPoolSize = 1000
-const defaultPageSize = 4096 * 2 // 8K
+const defaultPageSize = 4096 // 4K
 const defaultThreadsCount = 8
 const defaultAnalysisLimit = 2000
 const defaultIncrementalVacuum = 50

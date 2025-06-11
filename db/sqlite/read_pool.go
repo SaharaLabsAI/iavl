@@ -16,8 +16,7 @@ import (
 type ReadConnPool struct {
 	opts *Options
 
-	treeVersion atomic.Int64
-	savingTree  atomic.Bool
+	savingTree atomic.Bool
 
 	conns *ConnPool
 	iters *IterPool
@@ -44,10 +43,6 @@ func NewReadConnPool(opts *Options, MaxPoolSize int) (*ReadConnPool, error) {
 	// pool.logger.Info(fmt.Sprintf("Created readonly connection pool with max size %d", MaxPoolSize))
 
 	return pool, nil
-}
-
-func (pool *ReadConnPool) SetTreeVersion(version int64) {
-	pool.treeVersion.Store(version)
 }
 
 func (pool *ReadConnPool) SetSavingTree() {
@@ -82,13 +77,13 @@ func (pool *ReadConnPool) GetConn() (*ReadConn, error) {
 				// Checkpoint done, proceed with connection
 				defer pool.mu.RUnlock()
 				// Continue with existing GetConn logic
-				return pool.conns.getConn(pool.treeVersion.Load())
+				return pool.conns.getConn()
 			}
 		}
 	}
 
 	defer pool.mu.RUnlock()
-	return pool.conns.getConn(pool.treeVersion.Load())
+	return pool.conns.getConn()
 }
 
 // Close closes all connections in the pool
@@ -169,7 +164,7 @@ func NewConnPool(opts *Options, MaxPoolSize int, logger logger.Logger) *ConnPool
 	}
 }
 
-func (c *ConnPool) getConn(version int64) (*ReadConn, error) {
+func (c *ConnPool) getConn() (*ReadConn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

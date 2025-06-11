@@ -117,8 +117,6 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 		return err
 	}
 
-	sql.readPool.SetTreeVersion(version)
-
 	return nil
 }
 

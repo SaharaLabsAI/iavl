@@ -26,6 +26,30 @@ type ReadConn struct {
 	busy atomic.Bool
 }
 
+func NewMainReadConn(opts *Options, logger logger.Logger) (*ReadConn, error) {
+	conn, err := NewReadConn(opts, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	err = conn.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", opts.CacheSize))
+	if err != nil {
+		return nil, err
+	}
+
+	err = conn.Exec("PRAGMA temp_store=MEMORY;")
+	if err != nil {
+		return nil, err
+	}
+
+	err = conn.Exec(fmt.Sprintf("PRAGMA temp_store_size=%d;", opts.TempStoreSize))
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
 func NewReadConn(opts *Options, logger logger.Logger) (*ReadConn, error) {
 	conn, err := gosqlite.Open(opts.treeConnectionString(ReadOnly), openReadOnlyMode)
 	if err != nil {
@@ -95,6 +119,20 @@ func NewReadConn(opts *Options, logger logger.Logger) (*ReadConn, error) {
 	}
 
 	return c, nil
+}
+
+func (c *ReadConn) Refresh() error {
+	err := c.conn.Exec("PRAGMA query_only=OFF;")
+	if err != nil {
+		return err
+	}
+
+	err = c.conn.Exec("PRAGMA query_only=ON;")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *ReadConn) Prepare(statement string, args ...any) (*gosqlite.Stmt, error) {

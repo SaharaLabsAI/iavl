@@ -27,7 +27,7 @@ type SqliteDb struct {
 	writeCancel context.CancelFunc
 
 	// Used by block producer or syncer
-	read *ReadConn
+	mainRead *ReadConn
 
 	// Separate read conn configuration from main read, typical used by rpc query
 	readPool *ReadConnPool
@@ -119,7 +119,7 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 
 	sql.readPool.SetTreeVersion(version)
 
-	return sql.resetReadConn()
+	return nil
 }
 
 func (sql *SqliteDb) ReadPool() *ReadConnPool {
@@ -137,10 +137,6 @@ func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
 
 func (sql *SqliteDb) LatestVersion() (int64, error) {
 	return latestVersion(sql.opts)
-}
-
-func (sql *SqliteDb) ResetRead() error {
-	return sql.resetReadConn()
 }
 
 func (sql *SqliteDb) Path() string {
@@ -174,57 +170,6 @@ func (sql *SqliteDb) DeleteVersionsToSync(toVersion int64) error {
 	return nil
 }
 
-func (sql *SqliteDb) newReadConn() (*ReadConn, error) {
-	conn, err := NewReadConn(&sql.opts, sql.logger)
-	if err != nil {
-		return nil, err
-	}
-
-	err = conn.Exec(fmt.Sprintf("PRAGMA cache_size=%d;", sql.opts.CacheSize))
-	if err != nil {
-		return nil, err
-	}
-
-	err = conn.Exec("PRAGMA temp_store=MEMORY;")
-	if err != nil {
-		return nil, err
-	}
-
-	err = conn.Exec(fmt.Sprintf("PRAGMA temp_store_size=%d;", sql.opts.TempStoreSize))
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
-}
-
-func (sql *SqliteDb) resetReadConn() (err error) {
-	// if sql.read != nil {
-	// 	err = sql.read.Close()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-	// sql.read, err = sql.newReadConn()
-
-	if sql.read == nil {
-		sql.read, err = sql.newReadConn()
-		return err
-	}
-
-	err = sql.read.conn.Exec("PRAGMA query_only=OFF;")
-	if err != nil {
-		return err
-	}
-
-	err = sql.read.conn.Exec("PRAGMA query_only=ON;")
-	if err != nil {
-		return err
-	}
-
-	return err
-}
-
 func (sql *SqliteDb) isReadonlyDB() bool {
 	return sql.writeDb == nil
 }
@@ -235,11 +180,11 @@ func (sql *SqliteDb) getReadConn() (*ReadConn, error) {
 	}
 
 	var err error
-	if sql.read == nil {
-		sql.read, err = sql.newReadConn()
+	if sql.mainRead == nil {
+		sql.mainRead, err = NewMainReadConn(&sql.opts, sql.logger)
 	}
 
-	return sql.read, err
+	return sql.mainRead, err
 }
 
 func (sql *SqliteDb) newHashConnection() (*ReadConn, error) {
@@ -326,8 +271,8 @@ func (sql *SqliteDb) Close() error {
 		}
 	}
 
-	if sql.read != nil {
-		if err := sql.read.Close(); err != nil {
+	if sql.mainRead != nil {
+		if err := sql.mainRead.Close(); err != nil {
 			return err
 		}
 	}

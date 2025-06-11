@@ -193,7 +193,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 		parallelLoadSuccessful := false
 		if actualConnections > 1 {
 			for i := 0; i < actualConnections; i++ {
-				conn, err := tree.db.GetReadConn()
+				conn, err := tree.db.GetConn()
 				if err != nil {
 					for _, conn := range connPool {
 						if err := conn.Release(); err != nil {

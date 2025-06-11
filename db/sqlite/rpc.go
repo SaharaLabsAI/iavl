@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/eatonphil/gosqlite"
@@ -28,8 +27,6 @@ type SqliteReadConn struct {
 
 	inUse  atomic.Bool
 	logger logger.Logger
-
-	mu sync.RWMutex
 }
 
 func NewSqliteReadConn(conn *gosqlite.Conn, opts *Options, logger logger.Logger) *SqliteReadConn {

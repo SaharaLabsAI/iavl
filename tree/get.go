@@ -38,7 +38,7 @@ func (tree *Tree) Get(key []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	return tree.db.Get(key, treeVersion)
+	return tree.db.GetValue(key, treeVersion)
 }
 
 func (tree *Tree) GetFromRoot(key []byte) ([]byte, error) {

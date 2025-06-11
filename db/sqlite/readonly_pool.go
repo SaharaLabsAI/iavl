@@ -13,7 +13,7 @@ import (
 	"github.com/cosmos/iavl/v2/common/metrics"
 )
 
-type SqliteReadonlyConnPool struct {
+type ReadonlyConnPool struct {
 	opts *Options
 
 	treeVersion atomic.Int64
@@ -28,12 +28,12 @@ type SqliteReadonlyConnPool struct {
 	mu sync.RWMutex
 }
 
-func NewSqliteReadonlyConnPool(opts *Options, MaxPoolSize int) (*SqliteReadonlyConnPool, error) {
+func NewReadonlyConnPool(opts *Options, MaxPoolSize int) (*ReadonlyConnPool, error) {
 	if MaxPoolSize <= 0 {
 		MaxPoolSize = defaultMaxPoolSize
 	}
 
-	pool := &SqliteReadonlyConnPool{
+	pool := &ReadonlyConnPool{
 		opts:    opts,
 		conns:   NewConnPool(opts, MaxPoolSize, opts.Logger),
 		iters:   NewIterPool(opts.Logger),
@@ -46,21 +46,21 @@ func NewSqliteReadonlyConnPool(opts *Options, MaxPoolSize int) (*SqliteReadonlyC
 	return pool, nil
 }
 
-func (pool *SqliteReadonlyConnPool) SetTreeVersion(version int64) {
+func (pool *ReadonlyConnPool) SetTreeVersion(version int64) {
 	pool.treeVersion.Store(version)
 }
 
-func (pool *SqliteReadonlyConnPool) SetSavingTree() {
+func (pool *ReadonlyConnPool) SetSavingTree() {
 	pool.savingTree.Store(true)
 	pool.mu.Lock()
 }
 
-func (pool *SqliteReadonlyConnPool) UnsetSavingTree() {
+func (pool *ReadonlyConnPool) UnsetSavingTree() {
 	pool.savingTree.Store(false)
 	pool.mu.Unlock()
 }
 
-func (pool *SqliteReadonlyConnPool) GetConn() (*SqliteReadConn, error) {
+func (pool *ReadonlyConnPool) GetConn() (*SqliteReadConn, error) {
 	pool.mu.RLock()
 
 	if pool.savingTree.Load() {
@@ -92,7 +92,7 @@ func (pool *SqliteReadonlyConnPool) GetConn() (*SqliteReadConn, error) {
 }
 
 // Close closes all connections in the pool
-func (pool *SqliteReadonlyConnPool) Close() error {
+func (pool *ReadonlyConnPool) Close() error {
 	if err := pool.iters.closeHangingIterators(); err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (pool *SqliteReadonlyConnPool) Close() error {
 	return pool.conns.close()
 }
 
-func (pool *SqliteReadonlyConnPool) ResetShardQueries() {
+func (pool *ReadonlyConnPool) ResetShardQueries() {
 	// disable now because we don't enable sharding
 
 	// pool.mu.Lock()
@@ -111,15 +111,15 @@ func (pool *SqliteReadonlyConnPool) ResetShardQueries() {
 	// }
 }
 
-func (pool *SqliteReadonlyConnPool) CloseKVIterstor(idx int) error {
+func (pool *ReadonlyConnPool) CloseKVIterstor(idx int) error {
 	return pool.iters.closeKVIterstor(idx)
 }
 
-func (pool *SqliteReadonlyConnPool) CloseHangingIterators() error {
+func (pool *ReadonlyConnPool) CloseHangingIterators() error {
 	return pool.iters.closeHangingIterators()
 }
 
-func (pool *SqliteReadonlyConnPool) GetVersionDescLeafIterator(version int64, limit int) (stmt *gosqlite.Stmt, idx int, err error) {
+func (pool *ReadonlyConnPool) GetVersionDescLeafIterator(version int64, limit int) (stmt *gosqlite.Stmt, idx int, err error) {
 	conn, err := pool.GetConn()
 	if err != nil {
 		return nil, 0, err

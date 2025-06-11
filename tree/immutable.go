@@ -100,7 +100,7 @@ func (tree *ImmutableTree) Get(key []byte) ([]byte, error) {
 		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_db_get")
 	}
 
-	return tree.db.Get(key, tree.version)
+	return tree.db.GetValue(key, tree.version)
 }
 
 func (tree *ImmutableTree) Hash() []byte {

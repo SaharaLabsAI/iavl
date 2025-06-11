@@ -30,7 +30,7 @@ type SqliteDb struct {
 	read *SqliteReadConn
 
 	// Separate read conn configuration from main read, typical used by rpc query
-	readPool *SqliteReadonlyConnPool
+	readPool *ReadonlyConnPool
 	hashPool []*SqliteReadConn
 
 	metrics metrics.Proxy
@@ -84,7 +84,7 @@ func NewSqliteDb(opts Options) (*SqliteDb, error) {
 
 	sql.hashPool = make([]*SqliteReadConn, 0)
 
-	sql.readPool, err = NewSqliteReadonlyConnPool(&opts, opts.MaxPoolSize)
+	sql.readPool, err = NewReadonlyConnPool(&opts, opts.MaxPoolSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize read connection pool: %w", err)
 	}
@@ -122,11 +122,11 @@ func (sql *SqliteDb) SaveTree(version int64, root *inode.Node, updates *db.Dirty
 	return sql.resetReadConn()
 }
 
-func (sql *SqliteDb) ReadPool() *SqliteReadonlyConnPool {
+func (sql *SqliteDb) ReadPool() *ReadonlyConnPool {
 	return sql.readPool
 }
 
-func (sql *SqliteDb) Get(key []byte, version int64) ([]byte, error) {
+func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
 	conn, err := sql.getReadConn()
 	if err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (sql *SqliteDb) newHashConnection() (*SqliteReadConn, error) {
 	}, nil
 }
 
-func (sql *SqliteDb) GetReadConn() (db.ReadConn, error) {
+func (sql *SqliteDb) GetConn() (db.ReadConn, error) {
 	sql.rw.Lock()
 	defer sql.rw.Unlock()
 

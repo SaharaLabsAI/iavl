@@ -33,8 +33,8 @@ type ReadConn interface {
 
 type Read interface {
 	Path() string
-	Get(key []byte, version int64) ([]byte, error)
-	GetReadConn() (ReadConn, error)
+	GetConn() (ReadConn, error)
+	GetValue(key []byte, version int64) ([]byte, error)
 	GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error)
 	HasRoot(version int64) (bool, error)
 	LoadRoot(pool *nodepool.NodePool, version int64) (*inode.Node, error)

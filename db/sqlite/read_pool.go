@@ -11,6 +11,7 @@ import (
 
 	"github.com/cosmos/iavl/v2/common/logger"
 	"github.com/cosmos/iavl/v2/common/metrics"
+	inode "github.com/cosmos/iavl/v2/node"
 )
 
 type ReadConnPool struct {
@@ -103,15 +104,15 @@ func (pool *ReadConnPool) CloseHangingIterators() error {
 	return pool.iters.closeHangingIterators()
 }
 
-func (pool *ReadConnPool) GetVersionDescLeafIterator(version int64, limit int) (stmt *gosqlite.Stmt, idx int, err error) {
+func (pool *ReadConnPool) getLatestLeavesIterator(version int64, limit int) (*KVIterator, error) {
 	conn, err := pool.GetConn()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	idx = pool.iters.nextIdx()
+	idx := pool.iters.nextIdx()
 
-	stmt, err = conn.Prepare(`
+	stmt, err := conn.Prepare(`
 		SELECT l.key_hash, l.bytes, l.version
 		FROM changelog.leaf l
 		INNER JOIN (
@@ -123,16 +124,24 @@ func (pool *ReadConnPool) GetVersionDescLeafIterator(version int64, limit int) (
 		LIMIT ?;
 	`)
 	if err != nil {
-		return nil, idx, err
+		return nil, err
 	}
 
 	if err = stmt.Bind(version, limit); err != nil {
-		return nil, idx, err
+		return nil, err
 	}
 
 	pool.iters.setIterator(idx, stmt, conn)
 
-	return stmt, idx, nil
+	iter := &KVIterator{
+		IterPool: pool.iters,
+		valid:    true,
+		metrics:  pool.metrics,
+	}
+
+	iter.Next()
+
+	return iter, nil
 }
 
 type ConnPool struct {
@@ -272,4 +281,91 @@ func (i *IterPool) closeHangingIterators() error {
 	i.kvItrIdx = 0
 
 	return nil
+}
+
+type KVIterator struct {
+	IterPool *IterPool
+	itrStmt  *gosqlite.Stmt
+	start    []byte
+	end      []byte
+	valid    bool
+	err      error
+	key      []byte
+	value    []byte
+	metrics  metrics.Proxy
+	itrIdx   int
+}
+
+func (i *KVIterator) Domain() (start []byte, end []byte) {
+	return i.start, i.end
+}
+
+func (i *KVIterator) Valid() bool {
+	return i.valid
+}
+
+func (i *KVIterator) Next() {
+	if i.metrics != nil {
+		defer i.metrics.MeasureSince(time.Now(), "iavl2", "kv iterator", "next")
+	}
+	if !i.valid {
+		return
+	}
+
+	hasRow, err := i.itrStmt.Step()
+	if err != nil {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+	if !hasRow {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+
+	var nodeBz gosqlite.RawBytes
+	if err = i.itrStmt.Scan(&i.key, &nodeBz); err != nil {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+
+	i.value, err = inode.DecodeValueOnly(nodeBz)
+	if err != nil {
+		closeErr := i.Close()
+		if closeErr != nil {
+			i.err = fmt.Errorf("error closing iterator: %w; %w", closeErr, err)
+		}
+		return
+	}
+}
+
+func (i *KVIterator) Key() (key []byte) {
+	return i.key
+}
+
+func (i *KVIterator) Value() (value []byte) {
+	return i.value
+}
+
+func (i *KVIterator) Error() error {
+	return i.err
+}
+
+func (i *KVIterator) Close() error {
+	if i.valid {
+		if i.metrics != nil {
+			i.metrics.IncrCounter(1, "iavl2", "iterator", "close")
+		}
+		i.valid = false
+	}
+
+	return i.IterPool.closeKVIterstor(i.itrIdx)
 }

@@ -205,10 +205,6 @@ func (sql *SqliteDb) GetNode(nodePool *nodepool.NodePool, nodekey inode.NodeKey)
 	return conn.GetNode(nodePool, nodekey)
 }
 
-func (sql *SqliteDb) ReadPool() *ReadConnPool {
-	return sql.readPool
-}
-
 func (sql *SqliteDb) GetValue(key []byte, version int64) ([]byte, error) {
 	conn, err := sql.getReadConn()
 	if err != nil {

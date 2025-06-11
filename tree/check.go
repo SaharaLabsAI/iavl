@@ -50,7 +50,7 @@ var _ Iterator = (*WrongBranchHashIterator)(nil)
 
 func (tree *Tree) WrongBranchHashIterator(start, end int64) (Iterator, error) {
 	if tree.db.Type() != db.SQLITE {
-		return nil, fmt.Errorf("IteratorVersionDescLeaves only support SQLITE")
+		return nil, fmt.Errorf("IteratorLatestLeaves only support SQLITE")
 	}
 
 	pool := nodepool.NewNodePool()

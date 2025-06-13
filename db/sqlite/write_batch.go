@@ -3,15 +3,16 @@ package sqlite
 import (
 	"bytes"
 	"fmt"
+	"hash"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/eatonphil/gosqlite"
-	"lukechampine.com/blake3"
 
 	"github.com/cosmos/iavl/v2/common/logger"
 	"github.com/cosmos/iavl/v2/common/metrics"
 	"github.com/cosmos/iavl/v2/common/pool"
+	hashpool "github.com/cosmos/iavl/v2/common/pool/hash"
 	"github.com/cosmos/iavl/v2/db"
 	inode "github.com/cosmos/iavl/v2/node"
 )
@@ -122,6 +123,9 @@ func (b *WriteBatch) saveLeaves() (int64, error) {
 	buf := pool.BufPool.Get().(*bytes.Buffer)
 	defer pool.BufPool.Put(buf)
 
+	h := hashpool.Blake3Pool.Get().(hash.Hash)
+	defer hashpool.Blake3Pool.Put(h)
+
 	for _, leaf := range b.updates.Leaves {
 		b.leafCount++
 
@@ -131,9 +135,11 @@ func (b *WriteBatch) saveLeaves() (int64, error) {
 			return b.leafCount, err
 		}
 
-		keyHash := blake3.Sum256(leaf.Key())
+		h.Reset()
+		h.Write(leaf.Key())
+		keyHash := h.Sum(nil)
 
-		if err = b.leafInsert.Exec(leaf.Version(), int(leaf.NodeKey().Sequence()), keyHash[:], buf.Bytes()); err != nil {
+		if err = b.leafInsert.Exec(leaf.Version(), int(leaf.NodeKey().Sequence()), keyHash, buf.Bytes()); err != nil {
 			return 0, err
 		}
 

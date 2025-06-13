@@ -2,13 +2,14 @@ package sqlite
 
 import (
 	"fmt"
+	"hash"
 	"sync/atomic"
 
 	"github.com/eatonphil/gosqlite"
-	"lukechampine.com/blake3"
 
 	"github.com/cosmos/iavl/v2/common/constants"
 	"github.com/cosmos/iavl/v2/common/logger"
+	hashpool "github.com/cosmos/iavl/v2/common/pool/hash"
 	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
 	inode "github.com/cosmos/iavl/v2/node"
 )
@@ -171,8 +172,14 @@ func (c *ReadConn) GetValue(version int64, key []byte) ([]byte, error) {
 	}
 	defer c.queryKV.Reset()
 
-	keyHash := blake3.Sum256(key)
-	if err = c.queryKV.Bind(keyHash[:], version); err != nil {
+	h := hashpool.Blake3Pool.Get().(hash.Hash)
+	defer hashpool.Blake3Pool.Put(h)
+
+	h.Reset()
+	h.Write(key)
+	keyHash := h.Sum(nil)
+
+	if err = c.queryKV.Bind(keyHash, version); err != nil {
 		return nil, err
 	}
 

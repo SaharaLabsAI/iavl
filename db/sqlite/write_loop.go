@@ -20,7 +20,7 @@ import (
 	inode "github.com/cosmos/iavl/v2/node"
 )
 
-const pruneBatchSize = 2000
+const pruneBatchSize = 10000
 
 type pruneSignal struct {
 	pruneVersion int64

@@ -150,7 +150,12 @@ func (b *WriteBatch) saveLeaves() (int64, error) {
 
 	for _, leafDelete := range b.updates.Deletes {
 		b.leafCount++
-		if err = b.leafInsert.Exec(leafDelete.DeleteKey.Version(), int(leafDelete.DeleteKey.Sequence()), leafDelete.LeafKey, nil); err != nil {
+
+		h.Reset()
+		h.Write(leafDelete.LeafKey)
+		keyHash := h.Sum(nil)
+
+		if err = b.leafInsert.Exec(leafDelete.DeleteKey.Version(), int(leafDelete.DeleteKey.Sequence()), keyHash, nil); err != nil {
 			return 0, err
 		}
 		if err = b.changelogMaybeCommit(); err != nil {

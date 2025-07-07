@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - iavl2
   pull_request:
 
 jobs:

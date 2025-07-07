@@ -174,7 +174,7 @@ func (c *ConnPool) getConn() (*ReadConn, error) {
 		}
 	}
 
-	if len(c.conns) > c.opts.MaxPoolSize {
+	if len(c.conns) >= c.opts.MaxPoolSize {
 		return nil, fmt.Errorf("service busy, try again later")
 	}
 

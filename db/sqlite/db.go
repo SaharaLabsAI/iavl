@@ -253,6 +253,8 @@ func (sql *DB) DeleteVersionsToSync(toVersion int64) error {
 	}
 
 	<-sql.writeEv.awaitTreePruned
+	sql.writeEv.awaitTreePruned = nil
+
 	return nil
 }
 

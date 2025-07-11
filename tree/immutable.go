@@ -100,6 +100,10 @@ func (tree *ImmutableTree) Get(key []byte) ([]byte, error) {
 		defer tree.metrics.MeasureSince(time.Now(), constants.MetricsNamespace, "tree_db_get")
 	}
 
+	if tree.db == nil {
+		return nil, fmt.Errorf("immutable tree is nil")
+	}
+
 	return tree.db.GetValue(key, tree.version)
 }
 
@@ -258,7 +262,7 @@ func (tree *ImmutableTree) returnNode(node *inode.Node) {
 
 func (tree *ImmutableTree) Iterator(start, end []byte, inclusive bool) (itr Iterator, err error) {
 	itr = &LeafIterator{
-		tree:      tree,
+		tree:      tree.Clone(),
 		start:     start,
 		end:       end,
 		ascending: true,
@@ -284,7 +288,7 @@ func (tree *ImmutableTree) Iterator(start, end []byte, inclusive bool) (itr Iter
 
 func (tree *ImmutableTree) ReverseIterator(start, end []byte) (itr Iterator, err error) {
 	itr = &LeafIterator{
-		tree:      tree,
+		tree:      tree.Clone(),
 		start:     start,
 		end:       end,
 		ascending: false,
@@ -306,4 +310,14 @@ func (tree *ImmutableTree) ReverseIterator(start, end []byte) (itr Iterator, err
 	}
 
 	return itr, nil
+}
+
+func (tree *ImmutableTree) Clone() *ImmutableTree {
+	return &ImmutableTree{
+		version:  tree.version,
+		root:     tree.root,
+		db:       tree.db,
+		nodePool: tree.nodePool,
+		metrics:  tree.metrics,
+	}
 }

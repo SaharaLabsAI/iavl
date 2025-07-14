@@ -2,6 +2,9 @@ package node
 
 import (
 	"fmt"
+	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"unsafe"
 )
 
@@ -172,7 +175,10 @@ func (node *Node) String() string {
 
 func (node *Node) CheckValid() {
 	if node.source == PoolNode && node.poolID == 0 {
-		panic(fmt.Sprintf("attempt to use node (key: %s, nk: %s) after it was returned to pool or not properly initialized", node.key, node.nodeKey))
+		_, file, line, _ := runtime.Caller(1)
+		caller := fmt.Sprintf("%s:%d", filepath.Base(file), line)
+		stack := debug.Stack()
+		panic(fmt.Sprintf("attempt to use node (key: %s, nk: %s) after it was returned to pool or not properly initialized\n\ncaller: %s\nstack trace:\n%s", node.key, node.nodeKey, caller, string(stack)))
 	}
 }
 

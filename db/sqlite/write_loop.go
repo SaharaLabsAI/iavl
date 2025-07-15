@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -110,8 +111,10 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 	leafStarted := make(chan struct{})
 
 	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		if !w.conn.opts.DisableOSThreadLocking && os.Getenv("CI") == "" && os.Getenv("GITHUB_ACTIONS") == "" {
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+		}
 
 		if err := unix.Setpriority(unix.PRIO_PROCESS, 0, -20); err != nil {
 			w.logger.Warn("tree loop set priority", "error", err)
@@ -126,8 +129,10 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 		}
 	}()
 	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		if !w.conn.opts.DisableOSThreadLocking && os.Getenv("CI") == "" && os.Getenv("GITHUB_ACTIONS") == "" {
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+		}
 
 		if err := unix.Setpriority(unix.PRIO_PROCESS, 0, -20); err != nil {
 			w.logger.Warn("leaf loop set priority", "error", err)

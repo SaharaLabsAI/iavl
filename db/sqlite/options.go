@@ -57,6 +57,9 @@ type Options struct {
 	walPages int
 
 	OptimizeOnStart bool
+	// DisableOSThreadLocking disables OS thread locking for write loops
+	// Useful in CI environments where thread priority setting may not be available
+	DisableOSThreadLocking bool
 }
 
 func DefaultOptions(opts Options) Options {
@@ -122,6 +125,11 @@ func defaultOptions(opts Options) Options {
 
 	if opts.Logger == nil {
 		opts.Logger = logger.NewNopLogger()
+	}
+
+	// Auto-disable OS thread locking in CI environments
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		opts.DisableOSThreadLocking = true
 	}
 
 	return opts

@@ -30,7 +30,14 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          queries: +security-and-quality
+          queries: +security-and-quality,.github/codeql/
+          query-filters: |
+            - exclude:
+                id: go/useless-assignment-to-local
+            - include:
+                tags: security
+                tags: reliability
+                tags: performance
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
@@ -39,3 +46,57 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          upload: true
+          wait-for-processing: true
+
+  security-analysis:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL for Security
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: security-extended,security-and-quality,.github/codeql/
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Security Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go/security"
+
+  custom-analysis:
+    name: Custom Go Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL for Custom Queries
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: .github/codeql/go-custom-security.qls
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Custom Query Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go/custom"

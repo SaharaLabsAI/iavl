@@ -1,0 +1,9 @@
+- description: Custom Go security and reliability queries
+- queries: .
+  from: .github/codeql/
+- include:
+    tags: security
+- include:
+    tags: reliability
+- include:
+    tags: maintainability

@@ -313,11 +313,18 @@ func (tree *ImmutableTree) ReverseIterator(start, end []byte) (itr Iterator, err
 }
 
 func (tree *ImmutableTree) Clone() *ImmutableTree {
+	pool := nodepool.NewNodePool()
+
+	root := tree.root.DeepCopy(pool)
+	// Cloned tree always load node into it's pool
+	root.SetLeft(nil)
+	root.SetRight(nil)
+
 	return &ImmutableTree{
 		version:  tree.version,
-		root:     tree.root,
+		root:     root,
 		db:       tree.db,
-		nodePool: tree.nodePool,
+		nodePool: pool,
 		metrics:  tree.metrics,
 	}
 }

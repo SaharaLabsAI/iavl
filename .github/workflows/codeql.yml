@@ -30,14 +30,17 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          queries: +security-and-quality,.github/codeql/
-          query-filters: |
-            - exclude:
-                id: go/useless-assignment-to-local
-            - include:
-                tags: security
-                tags: reliability
-                tags: performance
+          queries: +security-and-quality,./.github/codeql/
+          config: |
+            query-filters:
+              - exclude:
+                  id: go/useless-assignment-to-local
+              - include:
+                  tags: security
+              - include:
+                  tags: reliability  
+              - include:
+                  tags: performance
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
@@ -65,7 +68,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: go
-          queries: security-extended,security-and-quality,.github/codeql/
+          queries: security-extended,security-and-quality,./.github/codeql/
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
@@ -91,7 +94,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: go
-          queries: .github/codeql/go-custom-security.qls
+          queries: ./.github/codeql/go-custom-security.qls
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3

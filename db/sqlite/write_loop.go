@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -112,6 +111,8 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 
 	go func() {
 		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
 		if err := unix.Setpriority(unix.PRIO_PROCESS, 0, -20); err != nil {
 			w.logger.Warn("tree loop set priority", "error", err)
 		}
@@ -121,11 +122,13 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 		err := w.treeLoop(ctx)
 		if err != nil {
 			w.logger.Error("tree loop failed", "error", err)
-			os.Exit(1)
+			return
 		}
 	}()
 	go func() {
 		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
 		if err := unix.Setpriority(unix.PRIO_PROCESS, 0, -20); err != nil {
 			w.logger.Warn("leaf loop set priority", "error", err)
 		}
@@ -135,7 +138,7 @@ func (w *WriteEventLoop) start(ctx context.Context) {
 		err := w.leafLoop(ctx)
 		if err != nil {
 			w.logger.Error("leaf loop failed", "error", err)
-			os.Exit(1)
+			return
 		}
 	}()
 

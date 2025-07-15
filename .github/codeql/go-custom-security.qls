@@ -1,6 +1,5 @@
 - description: Custom Go security and reliability queries
-- queries: .
-  from: .github/codeql/
+- queries: ./.github/codeql/
 - include:
     tags: security
 - include:

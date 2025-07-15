@@ -94,7 +94,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: go
-          queries: ./.github/codeql/go-custom-security.qls
+          queries: ./.github/codeql/
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3

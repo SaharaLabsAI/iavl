@@ -358,13 +358,13 @@ func (mt *MultiTree) TestBuild(opts *testutil.TreeBuildOptions) (int64, error) {
 			workingBytes += tr.WorkingBytes()
 			workingSize += tr.WorkingSize()
 			writeTime += sm.WriteTime
-			writeCount += sm.WriteLeaves + sm.WriteBranch
-			hashCount += sm.TreeHash
+			writeCount += sm.WriteLeaves.Load() + sm.WriteBranch.Load()
+			hashCount += sm.TreeHash.Load()
 			sm.WriteDurations = nil
-			sm.WriteLeaves = 0
-			sm.WriteBranch = 0
+			sm.WriteLeaves.Store(0)
+			sm.WriteBranch.Store(0)
 			sm.WriteTime = 0
-			sm.TreeHash = 0
+			sm.TreeHash.Store(0)
 		}
 		fmt.Printf("leaves=%s time=%s last=%s μ=%s version=%d work-size=%s work-bytes=%s %s\n",
 			humanize.Comma(cnt),

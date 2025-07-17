@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/aybabtme/uniplot/histogram"
@@ -52,35 +53,35 @@ func (s *StructMetrics) IncrCounter(val float32, keys ...string) {
 	k := keys[1]
 	switch k {
 	case "pool_get":
-		s.PoolGet += int64(val)
+		s.PoolGet.Add(int64(val))
 	case "pool_return":
-		s.PoolReturn += int64(val)
+		s.PoolReturn.Add(int64(val))
 	case "pool_evict":
-		s.PoolEvict += int64(val)
+		s.PoolEvict.Add(int64(val))
 	case "pool_evict_miss":
-		s.PoolEvictMiss += int64(val)
+		s.PoolEvictMiss.Add(int64(val))
 	case "pool_fault":
-		s.PoolFault += int64(val)
+		s.PoolFault.Add(int64(val))
 
 	case "tree_update":
-		s.TreeUpdate += int64(val)
+		s.TreeUpdate.Add(int64(val))
 	case "tree_new_node":
-		s.TreeNewNode += int64(val)
+		s.TreeNewNode.Add(int64(val))
 	case "tree_delete":
-		s.TreeDelete += int64(val)
+		s.TreeDelete.Add(int64(val))
 	case "tree_hash":
-		s.TreeHash += int64(val)
+		s.TreeHash.Add(int64(val))
 
 	case "db_get_leaf":
-		s.QueryLeafCount += int64(val)
+		s.QueryLeafCount.Add(int64(val))
 	case "db_get_branch":
-		s.QueryBranchCount += int64(val)
+		s.QueryBranchCount.Add(int64(val))
 	case "db_leaf_miss":
-		s.QueryLeafMiss += int64(val)
+		s.QueryLeafMiss.Add(int64(val))
 	case "db_write_leaf":
-		s.WriteLeaves += int64(val)
+		s.WriteLeaves.Add(int64(val))
 	case "db_write_branch":
-		s.WriteBranch += int64(val)
+		s.WriteBranch.Add(int64(val))
 	}
 }
 
@@ -96,7 +97,7 @@ func (s *StructMetrics) MeasureSince(start time.Time, keys ...string) {
 	case "db_get":
 		s.QueryDurations = append(s.QueryDurations, dur)
 		s.QueryTime += dur
-		s.QueryCount++
+		s.QueryCount.Add(1)
 	case "db_write":
 		s.WriteDurations = append(s.WriteDurations, dur)
 		s.WriteTime += dur
@@ -104,60 +105,60 @@ func (s *StructMetrics) MeasureSince(start time.Time, keys ...string) {
 }
 
 type TreeMetrics struct {
-	PoolGet       int64
-	PoolReturn    int64
-	PoolEvict     int64
-	PoolEvictMiss int64
-	PoolFault     int64
+	PoolGet       atomic.Int64
+	PoolReturn    atomic.Int64
+	PoolEvict     atomic.Int64
+	PoolEvictMiss atomic.Int64
+	PoolFault     atomic.Int64
 
-	TreeUpdate  int64
-	TreeNewNode int64
-	TreeDelete  int64
-	TreeHash    int64
+	TreeUpdate  atomic.Int64
+	TreeNewNode atomic.Int64
+	TreeDelete  atomic.Int64
+	TreeHash    atomic.Int64
 }
 
 type DbMetrics struct {
 	WriteDurations []time.Duration
 	WriteTime      time.Duration
-	WriteLeaves    int64
-	WriteBranch    int64
+	WriteLeaves    atomic.Int64
+	WriteBranch    atomic.Int64
 
 	QueryDurations   []time.Duration
 	QueryTime        time.Duration
-	QueryCount       int64
-	QueryLeafMiss    int64
-	QueryLeafCount   int64
-	QueryBranchCount int64
+	QueryCount       atomic.Int64
+	QueryLeafMiss    atomic.Int64
+	QueryLeafCount   atomic.Int64
+	QueryBranchCount atomic.Int64
 }
 
 func (m *TreeMetrics) Report() {
 	fmt.Printf("Pool:\n gets: %s, returns: %s, faults: %s, evicts: %s, evict miss %s\n",
-		humanize.Comma(m.PoolGet),
-		humanize.Comma(m.PoolReturn),
-		humanize.Comma(m.PoolFault),
-		humanize.Comma(m.PoolEvict),
-		humanize.Comma(m.PoolEvictMiss),
+		humanize.Comma(m.PoolGet.Load()),
+		humanize.Comma(m.PoolReturn.Load()),
+		humanize.Comma(m.PoolFault.Load()),
+		humanize.Comma(m.PoolEvict.Load()),
+		humanize.Comma(m.PoolEvictMiss.Load()),
 	)
 
 	fmt.Printf("\nTree:\n update: %s, new node: %s, delete: %s\n",
-		humanize.Comma(m.TreeUpdate),
-		humanize.Comma(m.TreeNewNode),
-		humanize.Comma(m.TreeDelete))
+		humanize.Comma(m.TreeUpdate.Load()),
+		humanize.Comma(m.TreeNewNode.Load()),
+		humanize.Comma(m.TreeDelete.Load()))
 }
 
 func (s *StructMetrics) QueryReport(bins int) error {
-	if s.QueryCount == 0 {
+	if s.QueryCount.Load() == 0 {
 		return nil
 	}
 
 	fmt.Printf("queries=%s q/s=%s dur/q=%s dur=%s leaf-q=%s branch-q=%s leaf-miss=%s\n",
-		humanize.Comma(s.QueryCount),
-		humanize.Comma(int64(float64(s.QueryCount)/s.QueryTime.Seconds())),
-		time.Duration(int64(s.QueryTime)/s.QueryCount),
+		humanize.Comma(s.QueryCount.Load()),
+		humanize.Comma(int64(float64(s.QueryCount.Load())/s.QueryTime.Seconds())),
+		time.Duration(int64(s.QueryTime)/s.QueryCount.Load()),
 		s.QueryTime.Round(time.Millisecond),
-		humanize.Comma(s.QueryLeafCount),
-		humanize.Comma(s.QueryBranchCount),
-		humanize.Comma(s.QueryLeafMiss),
+		humanize.Comma(s.QueryLeafCount.Load()),
+		humanize.Comma(s.QueryBranchCount.Load()),
+		humanize.Comma(s.QueryLeafMiss.Load()),
 	)
 
 	if bins > 0 {
@@ -185,22 +186,22 @@ func (s *StructMetrics) QueryReport(bins int) error {
 func (s *StructMetrics) SetQueryZero() {
 	s.QueryDurations = nil
 	s.QueryTime = 0
-	s.QueryCount = 0
-	s.QueryLeafMiss = 0
-	s.QueryLeafCount = 0
-	s.QueryBranchCount = 0
+	s.QueryCount.Store(0)
+	s.QueryLeafMiss.Store(0)
+	s.QueryLeafCount.Store(0)
+	s.QueryBranchCount.Store(0)
 }
 
 func (s *StructMetrics) Add(os *StructMetrics) {
 	s.WriteDurations = append(s.WriteDurations, os.WriteDurations...)
 	s.WriteTime += os.WriteTime
-	s.WriteLeaves += os.WriteLeaves
-	s.WriteBranch += os.WriteBranch
+	s.WriteLeaves.Add(os.WriteLeaves.Load())
+	s.WriteBranch.Add(os.WriteBranch.Load())
 
 	s.QueryDurations = append(s.QueryDurations, os.QueryDurations...)
 	s.QueryTime += os.QueryTime
-	s.QueryCount += os.QueryCount
-	s.QueryLeafMiss += os.QueryLeafMiss
-	s.QueryLeafCount += os.QueryLeafCount
-	s.QueryBranchCount += os.QueryBranchCount
+	s.QueryCount.Add(os.QueryCount.Load())
+	s.QueryLeafMiss.Add(os.QueryLeafMiss.Load())
+	s.QueryLeafCount.Add(os.QueryLeafCount.Load())
+	s.QueryBranchCount.Add(os.QueryBranchCount.Load())
 }

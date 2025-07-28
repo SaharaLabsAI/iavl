@@ -1,388 +1,389 @@
 package v0
 
-import (
-	"bytes"
-	"errors"
-	"fmt"
-	"sync"
+// import (
+// 	"bytes"
+// 	"errors"
+// 	"fmt"
+// 	"sync"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
-	"github.com/kocubinski/costor-api/logz"
-	"github.com/spf13/cobra"
+// 	"github.com/gogo/protobuf/proto"
+// 	"github.com/gogo/protobuf/types"
+// 	"github.com/kocubinski/costor-api/logz"
+// 	"github.com/spf13/cobra"
 
-	iavlv2 "github.com/cosmos/iavl/v2"
-	"github.com/cosmos/iavl/v2/migrate/core"
-)
+// 	"github.com/cosmos/iavl/v2/db/sqlite"
+// 	"github.com/cosmos/iavl/v2/migrate/core"
+// )
 
-func Command() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "v0",
-		Short: "migrate latest iavl v0 application.db state to iavl v2 in sqlite",
-	}
-	cmd.AddCommand(allCommand(), snapshotCommand(), metadataCommand(), latestVersionCommand())
-	return cmd
-}
+// func Command() *cobra.Command {
+// 	cmd := &cobra.Command{
+// 		Use:   "v0",
+// 		Short: "migrate latest iavl v0 application.db state to iavl v2 in sqlite",
+// 	}
+// 	cmd.AddCommand(allCommand(), snapshotCommand(), metadataCommand(), latestVersionCommand())
+// 	return cmd
+// }
 
-const (
-	latestVersionKey = "s/latest"
-	commitInfoKeyFmt = "s/%d" // s/<version>
-	appVersionKey    = "s/appversion"
-)
+// const (
+// 	latestVersionKey = "s/latest"
+// 	commitInfoKeyFmt = "s/%d" // s/<version>
+// 	appVersionKey    = "s/appversion"
+// )
 
-func metadataCommand() *cobra.Command {
-	var (
-		dbv0 string
-		dbv2 string
-	)
-	cmd := &cobra.Command{
-		Use:   "v45-metadata",
-		Short: "migrate CosmosSDK v0.45 store metadata stored in application.db state to iavl v2 in sqlite",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			log := logz.Logger.With().Str("op", "migrate").Logger()
+// func metadataCommand() *cobra.Command {
+// 	var (
+// 		dbv0 string
+// 		dbv2 string
+// 	)
+// 	cmd := &cobra.Command{
+// 		Use:   "v45-metadata",
+// 		Short: "migrate CosmosSDK v0.45 store metadata stored in application.db state to iavl v2 in sqlite",
+// 		RunE: func(cmd *cobra.Command, args []string) error {
+// 			log := logz.Logger.With().Str("op", "migrate").Logger()
 
-			v0, err := core.NewReadonlyStore(dbv0)
-			if err != nil {
-				return err
-			}
-			v2, err := iavlv2.NewSqliteKVStore(iavlv2.Options{Path: dbv2})
-			if err != nil {
-				return err
-			}
-			bz, err := v0.Get([]byte(latestVersionKey))
-			if err != nil {
-				return err
-			}
-			i64 := &types.Int64Value{}
-			err = proto.Unmarshal(bz, i64)
-			if err != nil {
-				return err
-			}
-			log.Info().Msgf("latest version: %d\n", i64.Value)
-			if err = v2.Set([]byte(latestVersionKey), bz); err != nil {
-				return err
-			}
+// 			v0, err := core.NewReadonlyStore(dbv0)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			// sqlite.NewSqliteKVStore(sqlite.Options{Path: dbv2})
 
-			bz, err = v0.Get([]byte(fmt.Sprintf(commitInfoKeyFmt, i64.Value)))
-			if err != nil {
-				return err
-			}
-			commitInfo := &CommitInfo{}
-			if err = proto.Unmarshal(bz, commitInfo); err != nil {
-				return err
-			}
-			if err = v2.Set([]byte(fmt.Sprintf(commitInfoKeyFmt, i64.Value)), bz); err != nil {
-				return err
-			}
+// 			v2, err := sqlite.NewSqliteKVStore(sqlite.Options{Path: dbv2})
+// 			if err != nil {
+// 				return err
+// 			}
+// 			bz, err := v0.Get([]byte(latestVersionKey))
+// 			if err != nil {
+// 				return err
+// 			}
+// 			i64 := &types.Int64Value{}
+// 			err = proto.Unmarshal(bz, i64)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			log.Info().Msgf("latest version: %d\n", i64.Value)
+// 			if err = v2.Set([]byte(latestVersionKey), bz); err != nil {
+// 				return err
+// 			}
 
-			bz, err = v0.Get([]byte(appVersionKey))
-			if err != nil {
-				return err
-			}
-			if err = v2.Set([]byte(appVersionKey), bz); err != nil {
-				return err
-			}
+// 			bz, err = v0.Get([]byte(fmt.Sprintf(commitInfoKeyFmt, i64.Value)))
+// 			if err != nil {
+// 				return err
+// 			}
+// 			commitInfo := &CommitInfo{}
+// 			if err = proto.Unmarshal(bz, commitInfo); err != nil {
+// 				return err
+// 			}
+// 			if err = v2.Set([]byte(fmt.Sprintf(commitInfoKeyFmt, i64.Value)), bz); err != nil {
+// 				return err
+// 			}
 
-			return nil
-		},
-	}
+// 			bz, err = v0.Get([]byte(appVersionKey))
+// 			if err != nil {
+// 				return err
+// 			}
+// 			if err = v2.Set([]byte(appVersionKey), bz); err != nil {
+// 				return err
+// 			}
 
-	cmd.Flags().StringVar(&dbv0, "db-v0", "", "Path to the v0 application.db")
-	cmd.Flags().StringVar(&dbv2, "db-v2", "", "Path to the v2 root")
-	if err := cmd.MarkFlagRequired("db-v0"); err != nil {
-		panic(err)
-	}
-	if err := cmd.MarkFlagRequired("db-v2"); err != nil {
-		panic(err)
-	}
-	return cmd
-}
+// 			return nil
+// 		},
+// 	}
 
-func latestVersionCommand() *cobra.Command {
-	var (
-		db      string
-		version int
-		set     bool
-	)
-	cmd := &cobra.Command{
-		Use:   "latest-version",
-		Short: "get/set the latest version in the metadata.sqlite",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			kv, err := iavlv2.NewSqliteKVStore(iavlv2.Options{Path: db})
-			if err != nil {
-				return err
-			}
-			if set && version == -1 {
-				return errors.New("version must be set")
-			}
-			if set {
+// 	cmd.Flags().StringVar(&dbv0, "db-v0", "", "Path to the v0 application.db")
+// 	cmd.Flags().StringVar(&dbv2, "db-v2", "", "Path to the v2 root")
+// 	if err := cmd.MarkFlagRequired("db-v0"); err != nil {
+// 		panic(err)
+// 	}
+// 	if err := cmd.MarkFlagRequired("db-v2"); err != nil {
+// 		panic(err)
+// 	}
+// 	return cmd
+// }
 
-			} else {
-				bz, err := kv.Get([]byte(latestVersionKey))
-				if err != nil {
-					return err
-				}
-				i64 := &types.Int64Value{}
-				err = proto.Unmarshal(bz, i64)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("latest version: %d\n", i64.Value)
-			}
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&db, "db", "", "Path to the metadata.sqlite")
-	if err := cmd.MarkFlagRequired("db"); err != nil {
-		panic(err)
-	}
-	cmd.Flags().IntVar(&version, "version", -1, "Version to set")
-	cmd.Flags().BoolVar(&set, "set", false, "Set the latest version")
-	return cmd
-}
+// func latestVersionCommand() *cobra.Command {
+// 	var (
+// 		db      string
+// 		version int
+// 		set     bool
+// 	)
+// 	cmd := &cobra.Command{
+// 		Use:   "latest-version",
+// 		Short: "get/set the latest version in the metadata.sqlite",
+// 		RunE: func(cmd *cobra.Command, args []string) error {
+// 			kv, err := sqlite.NewSqliteKVStore(sqlite.Options{Path: db})
+// 			if err != nil {
+// 				return err
+// 			}
+// 			if set && version == -1 {
+// 				return errors.New("version must be set")
+// 			}
+// 			if set {
 
-func snapshotCommand() *cobra.Command {
-	var (
-		dbv0         string
-		snapshotPath string
-		storekey     string
-		concurrency  int
-	)
-	cmd := &cobra.Command{
-		Use:   "snapshot",
-		Short: "ingest latest iavl v0 application.db to a pre-order snapshot",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rs, err := core.NewReadonlyStore(dbv0)
-			if err != nil {
-				return err
-			}
+// 			} else {
+// 				bz, err := kv.Get([]byte(latestVersionKey))
+// 				if err != nil {
+// 					return err
+// 				}
+// 				i64 := &types.Int64Value{}
+// 				err = proto.Unmarshal(bz, i64)
+// 				if err != nil {
+// 					return err
+// 				}
+// 				fmt.Printf("latest version: %d\n", i64.Value)
+// 			}
+// 			return nil
+// 		},
+// 	}
+// 	cmd.Flags().StringVar(&db, "db", "", "Path to the metadata.sqlite")
+// 	if err := cmd.MarkFlagRequired("db"); err != nil {
+// 		panic(err)
+// 	}
+// 	cmd.Flags().IntVar(&version, "version", -1, "Version to set")
+// 	cmd.Flags().BoolVar(&set, "set", false, "Set the latest version")
+// 	return cmd
+// }
 
-			var wg sync.WaitGroup
+// func snapshotCommand() *cobra.Command {
+// 	var (
+// 		dbv0         string
+// 		snapshotPath string
+// 		storekey     string
+// 		concurrency  int
+// 	)
+// 	cmd := &cobra.Command{
+// 		Use:   "snapshot",
+// 		Short: "ingest latest iavl v0 application.db to a pre-order snapshot",
+// 		RunE: func(cmd *cobra.Command, args []string) error {
+// 			rs, err := core.NewReadonlyStore(dbv0)
+// 			if err != nil {
+// 				return err
+// 			}
 
-			var storeKeys []string
-			if storekey != "" {
-				storeKeys = []string{storekey}
-			} else {
-				for k := range rs.CommitInfoByName() {
-					storeKeys = append(storeKeys, k)
-				}
-			}
+// 			var wg sync.WaitGroup
 
-			lock := make(chan struct{}, concurrency)
-			for i := 0; i < concurrency; i++ {
-				lock <- struct{}{}
-			}
+// 			var storeKeys []string
+// 			if storekey != "" {
+// 				storeKeys = []string{storekey}
+// 			} else {
+// 				for k := range rs.CommitInfoByName() {
+// 					storeKeys = append(storeKeys, k)
+// 				}
+// 			}
 
-			// init db and close
-			initConn, err := iavlv2.NewIngestSnapshotConnection(snapshotPath)
-			if err != nil {
-				return err
-			}
-			if err = initConn.Close(); err != nil {
-				return err
-			}
+// 			lock := make(chan struct{}, concurrency)
+// 			for i := 0; i < concurrency; i++ {
+// 				lock <- struct{}{}
+// 			}
 
-			for _, storeKey := range storeKeys {
-				wg.Add(1)
-				go func(sk string) {
-					var count int64
+// 			// init db and close
+// 			initConn, err := sqlite.NewIngestSnapshotConnection(snapshotPath)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			if err = initConn.Close(); err != nil {
+// 				return err
+// 			}
 
-					<-lock
+// 			for _, storeKey := range storeKeys {
+// 				wg.Add(1)
+// 				go func(sk string) {
+// 					var count int64
 
-					log := logz.Logger.With().Str("store", sk).Logger()
-					log.Info().Msgf("migrating %s", sk)
+// 					<-lock
 
-					s, err := core.NewReadonlyStore(dbv0)
-					if err != nil {
-						panic(err)
-					}
-					_, tree, err := s.LatestTree(sk)
-					if err != nil {
-						log.Warn().Err(err).Msgf("skipping %s", sk)
-						wg.Done()
-						return
-					}
+// 					log := logz.Logger.With().Str("store", sk).Logger()
+// 					log.Info().Msgf("migrating %s", sk)
 
-					exporter, err := tree.ExportPreOrder()
-					if err != nil {
-						panic(err)
-					}
+// 					s, err := core.NewReadonlyStore(dbv0)
+// 					if err != nil {
+// 						panic(err)
+// 					}
+// 					_, tree, err := s.LatestTree(sk)
+// 					if err != nil {
+// 						log.Warn().Err(err).Msgf("skipping %s", sk)
+// 						wg.Done()
+// 						return
+// 					}
 
-					nextNodeFn := func() (*iavlv2.SnapshotNode, error) {
-						count++
-						exportNode, err := exporter.Next()
-						if err != nil {
-							log.Warn().Err(err).Msgf("export err after %d", count)
-							return nil, err
-						}
-						return &iavlv2.SnapshotNode{
-							Key:     exportNode.Key,
-							Value:   exportNode.Value,
-							Height:  exportNode.Height,
-							Version: exportNode.Version,
-						}, nil
-					}
+// 					exporter, err := tree.ExportPreOrder()
+// 					if err != nil {
+// 						panic(err)
+// 					}
 
-					conn, err := iavlv2.NewIngestSnapshotConnection(snapshotPath)
-					if err != nil {
-						panic(err)
-					}
-					root, err := iavlv2.IngestSnapshot(conn, sk, tree.Version(), nextNodeFn)
-					if err != nil {
-						panic(err)
-					}
+// 					nextNodeFn := func() (*sqlite.SnapshotNode, error) {
+// 						count++
+// 						exportNode, err := exporter.Next()
+// 						if err != nil {
+// 							log.Warn().Err(err).Msgf("export err after %d", count)
+// 							return nil, err
+// 						}
+// 						return &sqlite.SnapshotNode{
+// 							Key:     exportNode.Key,
+// 							Value:   exportNode.Value,
+// 							Height:  exportNode.Height,
+// 							Version: exportNode.Version,
+// 						}, nil
+// 					}
 
-					v0Hash, err := tree.WorkingHash()
-					if err != nil {
-						panic(err)
-					}
-					if !bytes.Equal(root.GetHash(), v0Hash) {
-						panic(fmt.Sprintf("v2 hash=%x != v0 hash=%x", root.GetHash(), v0Hash))
-					}
+// 					conn, err := sqlite.NewIngestSnapshotConnection(snapshotPath)
+// 					if err != nil {
+// 						panic(err)
+// 					}
+// 					root, err := sqlite.IngestSnapshot(conn, sk, tree.Version(), nextNodeFn)
+// 					if err != nil {
+// 						panic(err)
+// 					}
 
-					lock <- struct{}{}
-					wg.Done()
-				}(storeKey)
-			}
+// 					v0Hash, err := tree.WorkingHash()
+// 					if err != nil {
+// 						panic(err)
+// 					}
+// 					if !bytes.Equal(root.Hash(), v0Hash) {
+// 						panic(fmt.Sprintf("v2 hash=%x != v0 hash=%x", root.Hash(), v0Hash))
+// 					}
 
-			wg.Wait()
-			return nil
-		},
-	}
+// 					lock <- struct{}{}
+// 					wg.Done()
+// 				}(storeKey)
+// 			}
 
-	cmd.Flags().StringVar(&dbv0, "db-v0", "", "Path to the v0 application.db")
-	if err := cmd.MarkFlagRequired("db-v0"); err != nil {
-		panic(err)
-	}
-	cmd.Flags().StringVar(&snapshotPath, "snapshot-path", "", "Path to the snapshot")
-	if err := cmd.MarkFlagRequired("snapshot-path"); err != nil {
-		panic(err)
-	}
-	cmd.Flags().IntVar(&concurrency, "concurrency", 6, "Number of concurrent migrations")
-	cmd.Flags().StringVar(&storekey, "store-key", "", "Store key to migrate")
+// 			wg.Wait()
+// 			return nil
+// 		},
+// 	}
 
-	return cmd
-}
+// 	cmd.Flags().StringVar(&dbv0, "db-v0", "", "Path to the v0 application.db")
+// 	if err := cmd.MarkFlagRequired("db-v0"); err != nil {
+// 		panic(err)
+// 	}
+// 	cmd.Flags().StringVar(&snapshotPath, "snapshot-path", "", "Path to the snapshot")
+// 	if err := cmd.MarkFlagRequired("snapshot-path"); err != nil {
+// 		panic(err)
+// 	}
+// 	cmd.Flags().IntVar(&concurrency, "concurrency", 6, "Number of concurrent migrations")
+// 	cmd.Flags().StringVar(&storekey, "store-key", "", "Store key to migrate")
 
-func allCommand() *cobra.Command {
-	var (
-		dbv0        string
-		dbv2        string
-		storekey    string
-		concurrency int
-	)
-	cmd := &cobra.Command{
-		Use:   "all",
-		Short: "migrate latest iavl v0 application.db state to iavl v2 in sqlite",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rs, err := core.NewReadonlyStore(dbv0)
-			if err != nil {
-				return err
-			}
+// 	return cmd
+// }
 
-			var wg sync.WaitGroup
+// func allCommand() *cobra.Command {
+// 	var (
+// 		dbv0        string
+// 		dbv2        string
+// 		storekey    string
+// 		concurrency int
+// 	)
+// 	cmd := &cobra.Command{
+// 		Use:   "all",
+// 		Short: "migrate latest iavl v0 application.db state to iavl v2 in sqlite",
+// 		RunE: func(cmd *cobra.Command, args []string) error {
+// 			rs, err := core.NewReadonlyStore(dbv0)
+// 			if err != nil {
+// 				return err
+// 			}
 
-			var storeKeys []string
-			if storekey != "" {
-				storeKeys = []string{storekey}
-			} else {
-				for k := range rs.CommitInfoByName() {
-					storeKeys = append(storeKeys, k)
-				}
-			}
+// 			var wg sync.WaitGroup
 
-			lock := make(chan struct{}, concurrency)
-			for i := 0; i < concurrency; i++ {
-				lock <- struct{}{}
-			}
+// 			var storeKeys []string
+// 			if storekey != "" {
+// 				storeKeys = []string{storekey}
+// 			} else {
+// 				for k := range rs.CommitInfoByName() {
+// 					storeKeys = append(storeKeys, k)
+// 				}
+// 			}
 
-			for _, storeKey := range storeKeys {
-				wg.Add(1)
-				go func(sk string) {
-					var (
-						count int64
-						//since = time.Now()
-					)
+// 			lock := make(chan struct{}, concurrency)
+// 			for i := 0; i < concurrency; i++ {
+// 				lock <- struct{}{}
+// 			}
 
-					<-lock
+// 			for _, storeKey := range storeKeys {
+// 				wg.Add(1)
+// 				go func(sk string) {
+// 					var (
+// 						count int64
+// 						//since = time.Now()
+// 					)
 
-					log := logz.Logger.With().Str("store", sk).Logger()
-					log.Info().Msgf("migrating %s", sk)
+// 					<-lock
 
-					s, err := core.NewReadonlyStore(dbv0)
-					if err != nil {
-						panic(err)
-					}
-					_, tree, err := s.LatestTree(sk)
-					if err != nil {
-						log.Warn().Err(err).Msgf("skipping %s", sk)
-						wg.Done()
-						return
-					}
-					sql, err := iavlv2.NewDB(iavlv2.NewNodePool(),
-						iavlv2.Options{
-							Path:    fmt.Sprintf("%s/%s", dbv2, sk),
-							WalSize: 1024 * 1024 * 1024,
-						})
-					if err != nil {
-						panic(err)
-					}
-					exporter, err := tree.ExportPreOrder()
-					if err != nil {
-						panic(err)
-					}
+// 					log := logz.Logger.With().Str("store", sk).Logger()
+// 					log.Info().Msgf("migrating %s", sk)
 
-					nextNodeFn := func() (*iavlv2.SnapshotNode, error) {
-						count++
-						exportNode, err := exporter.Next()
-						if err != nil {
-							log.Warn().Err(err).Msgf("export err after %d", count)
-							return nil, err
-						}
-						return &iavlv2.SnapshotNode{
-							Key:     exportNode.Key,
-							Value:   exportNode.Value,
-							Height:  exportNode.Height,
-							Version: exportNode.Version,
-						}, nil
-					}
+// 					s, err := core.NewReadonlyStore(dbv0)
+// 					if err != nil {
+// 						panic(err)
+// 					}
+// 					_, tree, err := s.LatestTree(sk)
+// 					if err != nil {
+// 						log.Warn().Err(err).Msgf("skipping %s", sk)
+// 						wg.Done()
+// 						return
+// 					}
+// 					sql, err := sqlite.NewDB(sqlite.Options{
+// 						Path:    fmt.Sprintf("%s/%s", dbv2, sk),
+// 						WalSize: 1024 * 1024 * 1024,
+// 					})
+// 					if err != nil {
+// 						panic(err)
+// 					}
+// 					exporter, err := tree.ExportPreOrder()
+// 					if err != nil {
+// 						panic(err)
+// 					}
 
-					root, err := sql.WriteSnapshot(cmd.Context(), tree.Version(), nextNodeFn,
-						iavlv2.SnapshotOptions{})
-					if err != nil {
-						panic(err)
-					}
+// 					nextNodeFn := func() (*sqlite.SnapshotNode, error) {
+// 						count++
+// 						exportNode, err := exporter.Next()
+// 						if err != nil {
+// 							log.Warn().Err(err).Msgf("export err after %d", count)
+// 							return nil, err
+// 						}
+// 						return &sqlite.SnapshotNode{
+// 							Key:     exportNode.Key,
+// 							Value:   exportNode.Value,
+// 							Height:  exportNode.Height,
+// 							Version: exportNode.Version,
+// 						}, nil
+// 					}
 
-					v0Hash, err := tree.WorkingHash()
-					if err != nil {
-						panic(err)
-					}
-					if !bytes.Equal(root.GetHash(), v0Hash) {
-						panic(fmt.Sprintf("v2 hash=%x != v0 hash=%x", root.GetHash(), v0Hash))
-					}
-					if err := sql.Close(); err != nil {
-						panic(err)
-					}
+// 					root, err := sql.WriteSnapshot(cmd.Context(), tree.Version(), nextNodeFn,
+// 						sqlite.SnapshotOptions{})
+// 					if err != nil {
+// 						panic(err)
+// 					}
 
-					lock <- struct{}{}
-					wg.Done()
-				}(storeKey)
-			}
+// 					v0Hash, err := tree.WorkingHash()
+// 					if err != nil {
+// 						panic(err)
+// 					}
+// 					if !bytes.Equal(root.Hash(), v0Hash) {
+// 						panic(fmt.Sprintf("v2 hash=%x != v0 hash=%x", root.Hash(), v0Hash))
+// 					}
+// 					if err := sql.Close(); err != nil {
+// 						panic(err)
+// 					}
 
-			wg.Wait()
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&dbv0, "db-v0", "", "Path to the v0 application.db")
-	cmd.Flags().StringVar(&dbv2, "db-v2", "", "Path to the v2 root")
-	cmd.Flags().StringVar(&storekey, "store-key", "", "Store key to migrate")
-	if err := cmd.MarkFlagRequired("db-v0"); err != nil {
-		panic(err)
-	}
-	if err := cmd.MarkFlagRequired("db-v2"); err != nil {
-		panic(err)
-	}
-	cmd.Flags().IntVar(&concurrency, "concurrency", 6, "Number of concurrent migrations")
+// 					lock <- struct{}{}
+// 					wg.Done()
+// 				}(storeKey)
+// 			}
 
-	return cmd
-}
+// 			wg.Wait()
+// 			return nil
+// 		},
+// 	}
+// 	cmd.Flags().StringVar(&dbv0, "db-v0", "", "Path to the v0 application.db")
+// 	cmd.Flags().StringVar(&dbv2, "db-v2", "", "Path to the v2 root")
+// 	cmd.Flags().StringVar(&storekey, "store-key", "", "Store key to migrate")
+// 	if err := cmd.MarkFlagRequired("db-v0"); err != nil {
+// 		panic(err)
+// 	}
+// 	if err := cmd.MarkFlagRequired("db-v2"); err != nil {
+// 		panic(err)
+// 	}
+// 	cmd.Flags().IntVar(&concurrency, "concurrency", 6, "Number of concurrent migrations")
+
+// 	return cmd
+// }

@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"runtime"
+	"sync"
+
 	hashpool "github.com/cosmos/iavl/v2/common/pool/hash"
 	nodepool3 "github.com/cosmos/iavl/v2/common/pool/node"
 	iavl3 "github.com/cosmos/iavl/v2/db/sqlite"
@@ -29,29 +32,28 @@ func Command() *cobra.Command {
 
 func V2toV3Command() *cobra.Command {
 	var (
-		dbv2      string
-		dbv3      string
-		storeKeys []string
+		dbV2, dbV3   string
+		storeKeysStr string
+		concurrent   bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "v2tov3",
-		Short: "migrate v2 to v3",
-		Run: func(cmd *cobra.Command, args []string) {
-			migrate(dbv2, dbv3, storeKeys)
+		Short: "migrate iavl2/ from v2 to v3 in sqlite",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var storeKeys []string
+			if storeKeysStr != "" {
+				storeKeys = strings.Split(storeKeysStr, ",")
+			}
+			return migrate(dbV2, dbV3, storeKeys, concurrent)
 		},
 	}
-
-	cmd.Flags().StringVar(&dbv2, "db-v2", "", "Path to the v2 root directory")
-	cmd.Flags().StringVar(&dbv3, "db-v3", "", "Path to the v3 root directory")
-	cmd.Flags().StringSliceVar(&storeKeys, "store-keys", nil, "Specific store keys to migrate (e.g., bank,acc). If not specified, migrate all stores")
-	if err := cmd.MarkFlagRequired("db-v2"); err != nil {
-		panic(err)
-	}
-	if err := cmd.MarkFlagRequired("db-v3"); err != nil {
-		panic(err)
-	}
-
+	cmd.Flags().StringVar(&dbV2, "db-v2", "", "Path to v2 iavl2/ directory")
+	cmd.Flags().StringVar(&dbV3, "db-v3", "", "Path to v3 iavl3/ directory")
+	cmd.Flags().StringVar(&storeKeysStr, "store-keys", "", "Comma-separated list of store keys to migrate (default: all)")
+	cmd.Flags().BoolVar(&concurrent, "concurrent", false, "Enable concurrent migration of stores (default: false)")
+	cmd.MarkFlagRequired("db-v2")
+	cmd.MarkFlagRequired("db-v3")
 	return cmd
 }
 
@@ -343,118 +345,97 @@ func migrateChangelog(oldPath, newPath string) error {
 	return nil
 }
 
-func migrate(baseOld, baseNew string, storeKeys []string) {
-	// baseOld := "data/iavl2"
-	// baseNew := "data/iavl3"
-
-	// Mgirate the specified store
-	if len(storeKeys) > 0 {
-		log.Printf("Migrating specified store keys: %v", storeKeys)
-		for _, storeKey := range storeKeys {
-			storePath := filepath.Join(baseOld, storeKey)
-			if _, err := os.Stat(storePath); os.IsNotExist(err) {
-				log.Printf("Store key directory does not exist: %s", storePath)
-				continue
-			}
-			log.Printf("Processing store key: %s", storeKey)
-			if err := migrateStore(storePath, filepath.Join(baseNew, storeKey)); err != nil {
-				log.Fatal(err)
-			}
-		}
-		return
+func migrate(baseOld, baseNew string, storeKeys []string, concurrent bool) error {
+	stores, err := getStoreKeys(baseOld, storeKeys)
+	if err != nil {
+		return err
 	}
-
-	// Default migrate all stores under the given path
-	log.Printf("Migrating all store keys")
-	var walkDir func(dir string) error
-	walkDir = func(dir string) error {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-
-		for _, entry := range entries {
-			path := filepath.Join(dir, entry.Name())
-
-			if entry.IsDir() {
-				// Recursively walk subdirectories
-				if err := walkDir(path); err != nil {
-					return err
-				}
-				continue
-			}
-
-			// Only process .sqlite files
-			if !strings.HasSuffix(entry.Name(), ".sqlite") {
-				continue
-			}
-
-			// Check if file still exists before processing
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				fmt.Printf("File no longer exists: %s\n", path)
-				continue
-			}
-
-			if entry.Name() == "tree.sqlite" {
-				fmt.Println("Processing tree.sqlite: ", path)
-				rel, _ := filepath.Rel(baseOld, path)  // e.g. "acc/tree.sqlite"
-				newPath := filepath.Join(baseNew, rel) // e.g. "data/iavl3/acc/tree.sqlite"
-				if err := migrateTree(path, newPath); err != nil {
-					return err
-				}
-			} else if entry.Name() == "changelog.sqlite" {
-				fmt.Println("Processing changelog.sqlite: ", path)
-				rel, _ := filepath.Rel(baseOld, path)  // e.g. "acc/changelog.sqlite"
-				newPath := filepath.Join(baseNew, rel) // e.g. "data/iavl3/acc/changelog.sqlite"
-				if err := migrateChangelog(path, newPath); err != nil {
-					return err
-				}
+	if !concurrent {
+		for _, store := range stores {
+			if err := migrateStoreWithLogger(store, baseOld, baseNew); err != nil {
+				return err
 			}
 		}
 		return nil
 	}
 
-	if err := walkDir(baseOld); err != nil {
-		log.Fatal(err)
+	maxWorkers := runtime.NumCPU()
+	log.Printf("migrate concurrently, max workers %d", maxWorkers)
+	sem := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+	var firstErr error
+	var mu sync.Mutex
+	for _, store := range stores {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(store string) {
+			defer wg.Done()
+			if err := migrateStoreWithLogger(store, baseOld, baseNew); err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+			<-sem
+		}(store)
 	}
+	wg.Wait()
+	return firstErr
 }
 
-// migrateStore migrate dbs from unit store dir
-func migrateStore(storeOldPath, storeNewPath string) error {
-	entries, err := os.ReadDir(storeOldPath)
-	if err != nil {
-		return err
+func migrateStoreWithLogger(store, baseOld, baseNew string) error {
+	oldTreePath := filepath.Join(baseOld, store, "tree.sqlite")
+	newTreePath := filepath.Join(baseNew, store, "tree.sqlite")
+	oldChangelogPath := filepath.Join(baseOld, store, "changelog.sqlite")
+	newChangelogPath := filepath.Join(baseNew, store, "changelog.sqlite")
+
+	log.Printf("Processing tree.sqlite:  %s", oldTreePath)
+	if _, err := os.Stat(oldTreePath); err == nil {
+		if err := migrateTree(oldTreePath, newTreePath); err != nil {
+			log.Printf("migrate tree.sqlite failed: %s, store: %s", err.Error(), store)
+			return err
+		}
+	} else {
+		log.Printf("tree.sqlite not found: %s", oldTreePath)
 	}
+	log.Printf("migrate tree.sqlite successfully, store: %s", store)
 
-	for _, entry := range entries {
-		path := filepath.Join(storeOldPath, entry.Name())
-
-		// Only process .sqlite files
-		if !strings.HasSuffix(entry.Name(), ".sqlite") {
-			continue
+	log.Printf("Processing changelog.sqlite:  %s", oldChangelogPath)
+	if _, err := os.Stat(oldChangelogPath); err == nil {
+		if err := migrateChangelog(oldChangelogPath, newChangelogPath); err != nil {
+			log.Printf("migrate changelog.sqlite failed: %s, store: %s", err.Error(), store)
+			return err
 		}
-
-		// Check if file still exists before processing
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			fmt.Printf("File no longer exists: %s\n", path)
-			continue
-		}
-
-		if entry.Name() == "tree.sqlite" {
-			fmt.Println("Processing tree.sqlite: ", path)
-			newPath := filepath.Join(storeNewPath, "tree.sqlite")
-			if err := migrateTree(path, newPath); err != nil {
-				return err
-			}
-		} else if entry.Name() == "changelog.sqlite" {
-			fmt.Println("Processing changelog.sqlite: ", path)
-			newPath := filepath.Join(storeNewPath, "changelog.sqlite")
-			if err := migrateChangelog(path, newPath); err != nil {
-				return err
-			}
-		}
+	} else {
+		log.Printf("changelog.sqlite not found: %s", oldChangelogPath)
 	}
+	log.Printf("migrate changelog.sqlite successfully, store: %s", store)
+
 	return nil
+}
+
+func getStoreKeys(baseOld string, filter []string) ([]string, error) {
+	entries, err := os.ReadDir(baseOld)
+	if err != nil {
+		return nil, err
+	}
+	var stores []string
+	filterSet := make(map[string]bool)
+	for _, k := range filter {
+		filterSet[k] = true
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if len(filterSet) > 0 && !filterSet[entry.Name()] {
+			continue
+		}
+		stores = append(stores, entry.Name())
+	}
+	return stores, nil
 }
 
 func CheckHash() *cobra.Command {

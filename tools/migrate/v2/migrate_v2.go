@@ -23,7 +23,7 @@ func Command() *cobra.Command {
 		Use:   "v2",
 		Short: "migrate iavl2/ from v2 to v3 in sqlite",
 	}
-	cmd.AddCommand(V2toV3Command(), CheckHash())
+	cmd.AddCommand(V2toV3Command(), CheckHash(), FixMissingShardCommand(), CheckShardsCommand())
 	return cmd
 }
 
@@ -80,7 +80,7 @@ func migrateTree(oldPath, newPath string) error {
 		}
 	}
 
-	// Create tables
+	// Create base tables
 	exec(`CREATE TABLE branch_orphan (
 	  version INT, sequence INT, at INT,
 	  PRIMARY KEY (at DESC, version, sequence)
@@ -89,36 +89,141 @@ func migrateTree(oldPath, newPath string) error {
 	  version INT, node_version INT, node_sequence INT, bytes BLOB,
 	  PRIMARY KEY (version DESC)
 	) WITHOUT ROWID;`)
-	exec(`CREATE TABLE tree_1 (
-	  version INT, sequence INT, bytes BLOB, orphaned BOOL,
-	  PRIMARY KEY (version, sequence)
-	) WITHOUT ROWID;`)
 
 	// ATTACH old db
 	exec(fmt.Sprintf(`ATTACH DATABASE '%s' AS old;`, oldPath))
 
-	// Migrate data
+	// Analyze version range in the old database to determine needed shards
+	log.Printf("analyzing version range in old database...")
+
+	// First check if there's any data in the tree_1 table
+	var count int64
+	err = oldDB.QueryRow("SELECT COUNT(*) FROM tree_1").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count rows in tree_1: %w", err)
+	}
+
+	// Check if there's any data in the root table
+	var rootCount int64
+	err = oldDB.QueryRow("SELECT COUNT(*) FROM root").Scan(&rootCount)
+	if err != nil {
+		return fmt.Errorf("failed to count rows in root: %w", err)
+	}
+
+	if count == 0 && rootCount == 0 {
+		log.Printf("no data found in tree_1 or root tables")
+		exec(`DETACH DATABASE old;`)
+		return nil
+	}
+
+	// Migrate root table data first (always migrate if it exists)
+	if rootCount > 0 {
+		log.Printf("migrating tree: table root %s → %s\n", oldPath, newPath)
+		exec(`INSERT INTO root(version, node_version, node_sequence, bytes)
+		      SELECT version, node_version, node_sequence, bytes FROM old.root;`)
+	}
+
+	// Migrate orphan table data if it exists
 	log.Printf("migrating tree: table branch_orphan %s → %s\n", oldPath, newPath)
 	exec(`INSERT INTO branch_orphan(version, sequence, at)
 	      SELECT version, sequence, at FROM old.orphan;`)
 
-	log.Printf("migrating tree: table root %s → %s\n", oldPath, newPath)
-	exec(`INSERT INTO root(version, node_version, node_sequence, bytes)
-	      SELECT version, node_version, node_sequence, bytes FROM old.root;`)
+	// Only process tree_1 data if it exists
+	if count > 0 {
+		// Get min and max versions from the old tree_1 table (v2 format), handling NULL values
+		var minVersion, maxVersion sql.NullInt64
+		err = oldDB.QueryRow("SELECT MIN(version), MAX(version) FROM tree_1 WHERE version IS NOT NULL").Scan(&minVersion, &maxVersion)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				log.Printf("no valid version data found in old database")
+				exec(`DETACH DATABASE old;`)
+				return nil
+			}
+			return fmt.Errorf("failed to query version range from tree_1: %w", err)
+		}
 
-	log.Printf("migrating tree: table tree_1 %s → %s\n", oldPath, newPath)
-	exec(`INSERT INTO tree_1(version, sequence, bytes, orphaned)
-	      SELECT version, sequence, bytes, orphaned FROM (
-	        SELECT version, sequence, bytes, orphaned,
-	               ROW_NUMBER() OVER (PARTITION BY version, sequence ORDER BY rowid) as rn
-	        FROM old.tree_1
-	      ) WHERE rn = 1;`)
+		// Check if we got valid version data
+		if !minVersion.Valid || !maxVersion.Valid {
+			log.Printf("no valid version data found in tree_1 table")
+			exec(`DETACH DATABASE old;`)
+			return nil
+		}
+
+		log.Printf("found version range: %d to %d", minVersion.Int64, maxVersion.Int64)
+
+		// Calculate needed shard IDs based on version range
+		shardIDs := calculateShardRange(minVersion.Int64, maxVersion.Int64)
+		log.Printf("need to create shards: %v", shardIDs)
+
+		// Create all needed shard tables
+		for _, shardID := range shardIDs {
+			tableName := fmt.Sprintf("tree_%d", shardID)
+			log.Printf("creating shard table: %s", tableName)
+			exec(fmt.Sprintf(`CREATE TABLE %s (
+			  version INT, sequence INT, bytes BLOB, orphaned BOOL,
+			  PRIMARY KEY (version, sequence)
+			) WITHOUT ROWID;`, tableName))
+		}
+
+		// Migrate tree data to appropriate shards
+		log.Printf("migrating tree data to shards...")
+
+		// For each shard, insert data for versions that belong to that shard
+		for _, shardID := range shardIDs {
+			tableName := fmt.Sprintf("tree_%d", shardID)
+
+			// Calculate version range for this shard
+			startVersion := (shardID-1)*500000 + 1
+			endVersion := shardID * 500000
+
+			log.Printf("migrating shard %d (versions %d-%d) to %s", shardID, startVersion, endVersion, tableName)
+
+			// Insert data for this shard's version range from old.tree_1
+			exec(fmt.Sprintf(`INSERT INTO %s(version, sequence, bytes, orphaned)
+			      SELECT version, sequence, bytes, orphaned FROM (
+			        SELECT version, sequence, bytes, orphaned,
+			               ROW_NUMBER() OVER (PARTITION BY version, sequence ORDER BY rowid) as rn
+			        FROM old.tree_1
+			        WHERE version >= %d AND version <= %d
+			      ) WHERE rn = 1;`, tableName, startVersion, endVersion))
+		}
+	} else {
+		log.Printf("tree_1 table is empty, skipping tree data migration")
+	}
 
 	// DETACH
 	exec(`DETACH DATABASE old;`)
 
 	log.Printf("finish migrating tree: %s → %s\n", oldPath, newPath)
 	return nil
+}
+
+// calculateShardRange calculates the range of shard IDs needed for a given version range
+func calculateShardRange(minVersion, maxVersion int64) []int64 {
+	if minVersion <= 0 || maxVersion <= 0 {
+		return []int64{1}
+	}
+
+	minShard := ToShardID(minVersion)
+	maxShard := ToShardID(maxVersion)
+
+	var shards []int64
+	for shardID := minShard; shardID <= maxShard; shardID++ {
+		shards = append(shards, shardID)
+	}
+
+	return shards
+}
+
+// ToShardID calculates the shard ID for a given version
+func ToShardID(version int64) int64 {
+	const defaultStartShardID = int64(1)
+	const defaultTreeShardSize = 500_000
+
+	if version <= 0 {
+		return defaultStartShardID
+	}
+	return (version-1)/defaultTreeShardSize + defaultStartShardID
 }
 
 func migrateChangelog(oldPath, newPath string) error {

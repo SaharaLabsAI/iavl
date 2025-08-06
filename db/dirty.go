@@ -1,6 +1,6 @@
 package db
 
-import inode "github.com/cosmos/iavl/v2/node"
+import inode "github.com/SaharaLabsAI/iavl/v2/node"
 
 type DeletedNode struct {
 	// the sequence in which this deletion was processed

@@ -1,4 +1,4 @@
-module github.com/cosmos/iavl/v2/migrate
+module github.com/SaharaLabsAI/iavl/v2/migrate
 
 go 1.21.0
 
@@ -8,7 +8,7 @@ require (
 	cosmossdk.io/api v0.7.2
 	github.com/cosmos/cosmos-db v1.0.0
 	github.com/cosmos/iavl v0.21.0-alpha.1.0.20231102165102-f418612be686
-	github.com/cosmos/iavl/v2 v2.0.0-20231102165636-7c5cca0663d5
+	github.com/SaharaLabsAI/iavl/v2 v2.0.0-20231102165636-7c5cca0663d5
 	github.com/gogo/protobuf v1.3.2
 	github.com/kocubinski/costor-api v1.1.2
 	github.com/spf13/cobra v1.7.0

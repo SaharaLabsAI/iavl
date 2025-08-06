@@ -3,7 +3,7 @@ package tree
 import (
 	"bytes"
 
-	inode "github.com/cosmos/iavl/v2/node"
+	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
 func (tree *Tree) Compare(other *Tree) error {

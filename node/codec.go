@@ -8,7 +8,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/cosmos/iavl/v2/common/encoding"
+	"github.com/SaharaLabsAI/iavl/v2/common/encoding"
 )
 
 type NodePool interface {

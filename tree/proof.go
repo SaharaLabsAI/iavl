@@ -10,9 +10,9 @@ import (
 
 	ics23 "github.com/cosmos/ics23/go"
 
-	"github.com/cosmos/iavl/v2/common/encoding"
-	"github.com/cosmos/iavl/v2/common/pool"
-	inode "github.com/cosmos/iavl/v2/node"
+	"github.com/SaharaLabsAI/iavl/v2/common/encoding"
+	"github.com/SaharaLabsAI/iavl/v2/common/pool"
+	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
 func (tree *Tree) GetProof(version int64, key []byte) (proof *ics23.CommitmentProof, err error) {

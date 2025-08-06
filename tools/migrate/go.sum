@@ -57,8 +57,8 @@ github.com/cosmos/iavl v0.21.0-alpha.1.0.20231102165102-f418612be686 h1:qrMEAMuG
 github.com/cosmos/iavl v0.21.0-alpha.1.0.20231102165102-f418612be686/go.mod h1:3avwC2UP2IGFn+uOQMXc2Z4lKy/1KTkTyMh/bB327b4=
 github.com/cosmos/iavl-bench/bench v0.0.2 h1:rQtzZ6wsFgtTyL2iKWcSon9eJnSDdZzNgp6RHrdu+Mg=
 github.com/cosmos/iavl-bench/bench v0.0.2/go.mod h1:j2rLae77EffacWcp7mmj3Uaa4AOAmZA7ymvhsuBQKKI=
-github.com/cosmos/iavl/v2 v2.0.0-20231102165636-7c5cca0663d5 h1:UwWp3Vsv4UjkPTKN+YE+UlsjRFTPisFSuyS+X8GIUyw=
-github.com/cosmos/iavl/v2 v2.0.0-20231102165636-7c5cca0663d5/go.mod h1:CiI/8RGo66kVqCCXvhgzzdHdPG9qW9xC5krZ6uny18I=
+github.com/SaharaLabsAI/iavl/v2 v2.0.0-20231102165636-7c5cca0663d5 h1:UwWp3Vsv4UjkPTKN+YE+UlsjRFTPisFSuyS+X8GIUyw=
+github.com/SaharaLabsAI/iavl/v2 v2.0.0-20231102165636-7c5cca0663d5/go.mod h1:CiI/8RGo66kVqCCXvhgzzdHdPG9qW9xC5krZ6uny18I=
 github.com/cosmos/ics23/go v0.10.0 h1:iXqLLgp2Lp+EdpIuwXTYIQU+AiHj9mOC2X9ab++bZDM=
 github.com/cosmos/ics23/go v0.10.0/go.mod h1:ZfJSmng/TBNTBkFemHHHj5YY7VAU/MBU980F4VU1NG0=
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=

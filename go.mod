@@ -1,4 +1,4 @@
-module github.com/cosmos/iavl/v2
+module github.com/SaharaLabsAI/iavl/v2
 
 go 1.23.0
 

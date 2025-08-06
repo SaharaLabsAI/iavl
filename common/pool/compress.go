@@ -1,6 +1,6 @@
 package pool
 
-import "github.com/cosmos/iavl/v2/common/compress"
+import "github.com/SaharaLabsAI/iavl/v2/common/compress"
 
 type Compress struct{}
 

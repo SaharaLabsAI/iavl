@@ -11,8 +11,8 @@ import (
 	"github.com/kocubinski/costor-api/logz"
 	"github.com/spf13/cobra"
 
-	iavlv2 "github.com/cosmos/iavl/v2"
-	"github.com/cosmos/iavl/v2/migrate/core"
+	iavlv2 "github.com/SaharaLabsAI/iavl/v2"
+	"github.com/SaharaLabsAI/iavl/v2/migrate/core"
 )
 
 func Command() *cobra.Command {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/emicklei/dot"
 
-	inode "github.com/cosmos/iavl/v2/node"
+	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
 func writeDotGraph(root *inode.Node, lastGraph *dot.Graph) *dot.Graph {

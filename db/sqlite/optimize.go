@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cosmos/iavl/v2/common/constants"
+	"github.com/SaharaLabsAI/iavl/v2/common/constants"
 )
 
 func runAnalyze(sql *WriteConn) error {

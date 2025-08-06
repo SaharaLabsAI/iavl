@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	inode "github.com/cosmos/iavl/v2/node"
+	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
 // NOTE: assumes that node can be modified

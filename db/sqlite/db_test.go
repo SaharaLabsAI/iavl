@@ -10,8 +10,8 @@ import (
 	"github.com/eatonphil/gosqlite"
 	"github.com/stretchr/testify/require"
 
-	inode "github.com/cosmos/iavl/v2/node"
-	testutil "github.com/cosmos/iavl/v2/tests/util"
+	inode "github.com/SaharaLabsAI/iavl/v2/node"
+	testutil "github.com/SaharaLabsAI/iavl/v2/tests/util"
 )
 
 func TestBuildSqlite(t *testing.T) {

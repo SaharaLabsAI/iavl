@@ -1,8 +1,8 @@
 package db
 
 import (
-	nodepool "github.com/cosmos/iavl/v2/common/pool/node"
-	inode "github.com/cosmos/iavl/v2/node"
+	nodepool "github.com/SaharaLabsAI/iavl/v2/common/pool/node"
+	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
 type Type int

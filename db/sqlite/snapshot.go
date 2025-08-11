@@ -185,6 +185,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 		defer pool.BufPool.Put(buf)
 
 		node := &inode.Node{}
+		node.SetSource(inode.ManualNode)
 		node.SetKey(snapshotNode.Key)
 		node.SetSubTreeHeight(snapshotNode.Height)
 		node.SetNodeKey(inode.NewNodeKey(snapshotNode.Version, uint32(ordinal)))
@@ -608,6 +609,7 @@ func (snap *sqliteSnapshot) restorePostOrderStep(nextFn func() (*SnapshotNode, e
 
 		uniqueVersions[snapshotNode.Version] = struct{}{}
 		node := &inode.Node{}
+		node.SetSource(inode.ManualNode)
 		node.SetKey(snapshotNode.Key)
 		node.SetSubTreeHeight(snapshotNode.Height)
 		node.SetNodeKey(inode.NewNodeKey(snapshotNode.Version, uint32(ordinal)))
@@ -670,6 +672,7 @@ func (snap *sqliteSnapshot) restorePreOrderStep(nextFn func() (*SnapshotNode, er
 		snap.ordinal++
 
 		node := &inode.Node{}
+		node.SetSource(inode.ManualNode)
 		node.SetKey(snapshotNode.Key)
 		node.SetSubTreeHeight(snapshotNode.Height)
 		node.SetNodeKey(inode.NewNodeKey(snapshotNode.Version, uint32(ordinal)))

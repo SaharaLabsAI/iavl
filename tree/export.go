@@ -145,13 +145,14 @@ func (e *Exporter) postOrderNext(root *inode.Node) {
 
 		case 2: // State 2: Process the node itself (both children have been handled)
 			processedNode := currentEntry.node
-			e.out <- processedNode
 
-			// Explicitly nil out child pointers in the processedNode after it's been sent.
+			// Explicitly nil out child pointers in the processedNode before it's been sent.
 			if processedNode != nil {
 				processedNode.SetLeft(nil)
 				processedNode.SetRight(nil)
 			}
+
+			e.out <- processedNode
 
 			s = s[:len(s)-1]
 		}

@@ -13,7 +13,7 @@ contributors to help continually secure our operations.
 | Scope                 |
 |-----------------------|
 | last release (tagged) |
-| main branch           |
+| iavl2 branch           |
 
 The latest **release tag** of this repository is supported for security updates
 as well as the **main** branch. Security vulnerabilities should be reported if

@@ -1,4 +1,4 @@
-package util
+package testutils
 
 import (
 	"fmt"
@@ -101,7 +101,7 @@ func BankLockup25_000() TreeBuildOptions {
 	return opts
 }
 
-func BigOptions_100_000() *TreeBuildOptions {
+func BigOptions100_000() *TreeBuildOptions {
 	var seed int64 = 1234
 	var versions int64 = 200_000
 	bankGen := bench.BankLikeGenerator(seed, versions)

@@ -11,7 +11,7 @@ import (
 	"github.com/SaharaLabsAI/iavl/v2/common/encoding"
 )
 
-type NodePool interface {
+type Pool interface {
 	Get() *Node
 }
 
@@ -30,7 +30,7 @@ func (node *Node) EncodeWithBuffer(buf *bytes.Buffer) error {
 }
 
 // Decode constructs a *Node from an encoded byte slice.
-func Decode(pool NodePool, nodeKey NodeKey, buf []byte) (*Node, error) {
+func Decode(pool Pool, nodeKey NodeKey, buf []byte) (*Node, error) {
 	// Read node header (height, size, version, key).
 	height, n, err := encoding.DecodeVarint(buf)
 	if err != nil {

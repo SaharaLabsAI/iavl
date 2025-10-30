@@ -94,7 +94,7 @@ type WrongBranchHashIterator struct {
 	metrics  metrics.Proxy
 }
 
-func (i *WrongBranchHashIterator) Domain() (strat []byte, end []byte) {
+func (i *WrongBranchHashIterator) Domain() (start []byte, end []byte) {
 	s := make([]byte, 8)
 	binary.BigEndian.PutUint64(s, uint64(i.start))
 

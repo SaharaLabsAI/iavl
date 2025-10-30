@@ -83,12 +83,12 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 		var leftHash []byte
 		if node.leftNode == nil {
 			panic("left child node cannot be nil during hash calculation")
-		} else {
-			leftHash = node.leftNode.hash
-			if leftHash == nil {
-				// Compute hash if needed - this is safer than panicking
-				leftHash = node.leftNode.HashSelf()
-			}
+		}
+
+		leftHash = node.leftNode.hash
+		if leftHash == nil {
+			// Compute hash if needed - this is safer than panicking
+			leftHash = node.leftNode.HashSelf()
 		}
 
 		n = binary.PutUvarint(tmp[:], uint64(len(leftHash)))
@@ -99,12 +99,12 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 		var rightHash []byte
 		if node.rightNode == nil {
 			panic("right child node cannot be nil during hash calculation")
-		} else {
-			rightHash = node.rightNode.hash
-			if rightHash == nil {
-				// Compute hash if needed - this is safer than panicking
-				rightHash = node.rightNode.HashSelf()
-			}
+		}
+
+		rightHash = node.rightNode.hash
+		if rightHash == nil {
+			// Compute hash if needed - this is safer than panicking
+			rightHash = node.rightNode.HashSelf()
 		}
 
 		n = binary.PutUvarint(tmp[:], uint64(len(rightHash)))

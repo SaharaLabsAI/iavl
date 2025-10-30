@@ -39,7 +39,7 @@ type ZstdEncoder struct {
 	*zstd.Encoder
 }
 
-func (z *ZstdEncoder) Type() CompressType {
+func (z *ZstdEncoder) Type() Type {
 	return ZSTD
 }
 
@@ -47,6 +47,6 @@ type ZstdDecoder struct {
 	*zstd.Decoder
 }
 
-func (z *ZstdDecoder) Type() CompressType {
+func (z *ZstdDecoder) Type() Type {
 	return ZSTD
 }

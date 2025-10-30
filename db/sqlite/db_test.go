@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	inode "github.com/SaharaLabsAI/iavl/v2/node"
-	testutil "github.com/SaharaLabsAI/iavl/v2/tests/util"
+	testutil "github.com/SaharaLabsAI/iavl/v2/tests/testutils"
 )
 
 func TestBuildSqlite(t *testing.T) {

@@ -170,6 +170,8 @@ func (sql *DB) LoadRoot(nodePool *nodepool.NodePool, version int64) (*inode.Node
 	// if nodeBz is nil then a (valid) empty tree was saved, which a nil root represents
 	var root *inode.Node
 	if nodeBz != nil {
+		// node seq in sqlite is uint32
+		//nolint:gosec
 		rootKey := inode.NewNodeKey(nodeVersion, uint32(nodeSeq))
 		root, err = inode.Decode(nodePool, rootKey, nodeBz)
 		if err != nil {

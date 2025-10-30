@@ -19,8 +19,8 @@ import (
 	nodepool "github.com/SaharaLabsAI/iavl/v2/common/pool/node"
 	"github.com/SaharaLabsAI/iavl/v2/db/sqlite"
 	inode "github.com/SaharaLabsAI/iavl/v2/node"
-	testutil "github.com/SaharaLabsAI/iavl/v2/tests/util"
-	imultitree "github.com/SaharaLabsAI/iavl/v2/tests/util/multitree"
+	testutil "github.com/SaharaLabsAI/iavl/v2/tests/testutils"
+	imultitree "github.com/SaharaLabsAI/iavl/v2/tests/testutils/multitree"
 	itree "github.com/SaharaLabsAI/iavl/v2/tree"
 )
 
@@ -41,7 +41,7 @@ func Test_TreeHash(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	require.NoError(t, err)
-	opts := testutil.BigOptions_100_000()
+	opts := testutil.BigOptions100_000()
 
 	// this hash was validated as correct (with this same dataset) in iavl-bench
 	// with `go run . tree --seed 1234 --dataset std`

@@ -144,7 +144,7 @@ func (ss *BranchShardInsert) Exec(version int64, sequence int, bz []byte) error 
 
 	st, exists := ss.stmts[shardID]
 	if !exists {
-		return fmt.Errorf("unexpected shard %d insert statment not found", shardID)
+		return fmt.Errorf("unexpected shard %d insert statement not found", shardID)
 	}
 	defer func() {
 		_ = st.Reset()
@@ -179,7 +179,7 @@ type BranchShardDelete struct {
 	nonexists map[int64]bool
 }
 
-func PrepareBranchShardDelete(sql *WriteConn, _ *BranchShards) (*BranchShardDelete, error) {
+func PrepareBranchShardDelete(_ *WriteConn, _ *BranchShards) (*BranchShardDelete, error) {
 	stmts := make(map[int64]*gosqlite.Stmt)
 	nonexists := make(map[int64]bool)
 	return &BranchShardDelete{stmts: stmts, nonexists: nonexists}, nil
@@ -217,7 +217,7 @@ func (sd *BranchShardDelete) Exec(version int64, sequence int) error {
 
 	st, exists := sd.stmts[shardID]
 	if !exists {
-		return fmt.Errorf("unexpected shard %d delete statment not found", shardID)
+		return fmt.Errorf("unexpected shard %d delete statement not found", shardID)
 	}
 	defer func() {
 		_ = st.Reset()
@@ -255,7 +255,7 @@ type BranchShardQuery struct {
 	stmts map[int64]*gosqlite.Stmt // shardID -> stmt
 }
 
-func PrepareBranchShardQuery(c *ReadConn) *BranchShardQuery {
+func PrepareBranchShardQuery(_ *ReadConn) *BranchShardQuery {
 	stmts := make(map[int64]*gosqlite.Stmt)
 	return &BranchShardQuery{stmts: stmts}
 }
@@ -283,7 +283,7 @@ func (sq *BranchShardQuery) Bind(version int64, sequence uint32) (*gosqlite.Stmt
 
 	st, exists := sq.stmts[shardID]
 	if !exists {
-		return nil, fmt.Errorf("unexpected shard %d query statment not found", shardID)
+		return nil, fmt.Errorf("unexpected shard %d query statement not found", shardID)
 	}
 
 	if err := st.Bind(version, int(sequence)); err != nil {

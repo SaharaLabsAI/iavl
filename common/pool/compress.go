@@ -4,7 +4,7 @@ import "github.com/SaharaLabsAI/iavl/v2/common/compress"
 
 type Compress struct{}
 
-func (c Compress) GetEncoder(ty compress.CompressType) compress.Encoder {
+func (c Compress) GetEncoder(ty compress.Type) compress.Encoder {
 	switch ty {
 	case compress.S2:
 		return compress.S2EncoderPool.Get().(compress.Encoder)
@@ -15,7 +15,7 @@ func (c Compress) GetEncoder(ty compress.CompressType) compress.Encoder {
 	}
 }
 
-func (c Compress) GetDecoder(ty compress.CompressType) compress.Decoder {
+func (c Compress) GetDecoder(ty compress.Type) compress.Decoder {
 	switch ty {
 	case compress.S2:
 		return compress.S2DecoderPool.Get().(compress.Decoder)

@@ -9,7 +9,7 @@ import (
 	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
-var GlobalPoolId atomic.Uint64
+var GlobalPoolID atomic.Uint64
 
 type NodePool struct {
 	syncPool *sync.Pool
@@ -26,12 +26,12 @@ func NewNodePool() *NodePool {
 		},
 	}
 
-	if GlobalPoolId.Load() == math.MaxUint64 {
+	if GlobalPoolID.Load() == math.MaxUint64 {
 		np.poolID.Store(1)
-		GlobalPoolId.Store(1)
+		GlobalPoolID.Store(1)
 	} else {
-		GlobalPoolId.Add(1)
-		np.poolID.Store(GlobalPoolId.Load())
+		GlobalPoolID.Add(1)
+		np.poolID.Store(GlobalPoolID.Load())
 	}
 
 	return np

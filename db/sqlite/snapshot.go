@@ -284,14 +284,14 @@ func (sql *DB) WriteSnapshot(
 	}
 
 	var (
-		root           *inode.Node
-		uniqueVersions map[int64]struct{}
+		root *inode.Node
+		// uniqueVersions map[int64]struct{}
 	)
 	switch opts.TraverseOrder {
 	case constants.PostOrder:
-		root, uniqueVersions, err = snap.restorePostOrderStep(nextFn)
+		root, _, err = snap.restorePostOrderStep(nextFn)
 	case constants.PreOrder:
-		root, uniqueVersions, err = snap.restorePreOrderStep(nextFn)
+		root, _, err = snap.restorePreOrderStep(nextFn)
 	}
 	if err != nil {
 		return nil, err
@@ -301,10 +301,10 @@ func (sql *DB) WriteSnapshot(
 		return nil, err
 	}
 
-	var versions []int64 // where is this used?
-	for v := range uniqueVersions {
-		versions = append(versions, v)
-	}
+	// var versions []int64 // where is this used?
+	// for v := range uniqueVersions {
+	// 	versions = append(versions, v)
+	// }
 
 	if err = sql.SaveTree(version, root, nil); err != nil {
 		return nil, err
@@ -439,7 +439,7 @@ func (sql *DB) ImportMostRecentSnapshot(targetVersion int64, traverseOrder const
 
 func FindDbsInPath(path string) ([]string, error) {
 	var paths []string
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(path, func(path string, _ os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

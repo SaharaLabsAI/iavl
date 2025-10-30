@@ -8,6 +8,8 @@ import (
 var emptyNodeKey = NodeKey{}
 
 // NodeKey represents a key of node in the DB.
+//
+//nolint:revive
 type NodeKey [12]byte
 
 func NewNodeKey(version int64, sequence uint32) NodeKey {

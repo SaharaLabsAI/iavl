@@ -2,7 +2,7 @@ package compress
 
 import "io"
 
-type CompressType int
+type Type int
 
 const (
 	S2 = iota
@@ -10,14 +10,14 @@ const (
 )
 
 type Encoder interface {
-	Type() CompressType
+	Type() Type
 	Reset(io.Writer)
 	Write([]byte) (int, error)
 	Close() error
 }
 
 type Decoder interface {
-	Type() CompressType
+	Type() Type
 	Reset(io.Reader) error
 	io.Reader
 }

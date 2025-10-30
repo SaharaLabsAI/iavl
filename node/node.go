@@ -13,10 +13,10 @@ const (
 	nodeSize = uint64(unsafe.Sizeof(Node{})) + hashSize
 )
 
-type NodeSource int
+type Source int
 
 const (
-	PoolNode NodeSource = iota
+	PoolNode Source = iota
 	ManualNode
 )
 
@@ -36,7 +36,7 @@ type Node struct {
 	dirty  bool
 	evict  bool
 	poolID uint64
-	source NodeSource
+	source Source
 }
 
 func NewNode(key, value []byte, version int64, height int8) *Node {
@@ -49,7 +49,7 @@ func NewNode(key, value []byte, version int64, height int8) *Node {
 	}
 }
 
-func (node *Node) ShadowCopy(nodepool NodePool) *Node {
+func (node *Node) ShadowCopy(nodepool Pool) *Node {
 	n := &Node{source: ManualNode}
 	if nodepool != nil {
 		n = nodepool.Get()
@@ -61,7 +61,7 @@ func (node *Node) ShadowCopy(nodepool NodePool) *Node {
 	return n
 }
 
-func (node *Node) DeepCopy(nodepool NodePool) *Node {
+func (node *Node) DeepCopy(nodepool Pool) *Node {
 	n := &Node{source: ManualNode}
 	if nodepool != nil {
 		n = nodepool.Get()
@@ -164,7 +164,7 @@ func (node *Node) PoolID() uint64 {
 	return node.poolID
 }
 
-func (node *Node) Source() NodeSource {
+func (node *Node) Source() Source {
 	return node.source
 }
 
@@ -263,7 +263,7 @@ func (node *Node) SetPoolID(id uint64) {
 	node.poolID = id
 }
 
-func (node *Node) SetSource(src NodeSource) {
+func (node *Node) SetSource(src Source) {
 	node.source = src
 }
 

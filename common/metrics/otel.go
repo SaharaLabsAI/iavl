@@ -8,9 +8,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	otelmetric "go.opentelemetry.io/otel/metric"
-)
 
-const metricsNamespace = "iavl2"
+	"github.com/SaharaLabsAI/iavl/v2/common/constants"
+)
 
 // Verify TelemetryMetrics implements the Proxy interface
 var _ Proxy = &OtelMetrics{}
@@ -42,7 +42,7 @@ type OtelMetrics struct {
 }
 
 func NewOtelMetrics() *OtelMetrics {
-	meter := otel.Meter(metricsNamespace)
+	meter := otel.Meter(constants.MetricsNamespace)
 
 	// Create instruments
 	poolOperations, err := meter.Int64Counter(
@@ -151,7 +151,7 @@ func NewOtelMetrics() *OtelMetrics {
 
 // IncrCounter increments the appropriate counter based on the metric key
 func (t *OtelMetrics) IncrCounter(val float32, keys ...string) {
-	if len(keys) != 2 || keys[0] != metricsNamespace {
+	if len(keys) != 2 || keys[0] != constants.MetricsNamespace {
 		return
 	}
 
@@ -225,7 +225,7 @@ func (t *OtelMetrics) IncrCounter(val float32, keys ...string) {
 
 // SetGauge sets the appropriate gauge metric
 func (t *OtelMetrics) SetGauge(val float32, keys ...string) {
-	if len(keys) != 2 || keys[0] != metricsNamespace {
+	if len(keys) != 2 || keys[0] != constants.MetricsNamespace {
 		return
 	}
 
@@ -242,7 +242,7 @@ func (t *OtelMetrics) SetGauge(val float32, keys ...string) {
 
 // MeasureSince measures the duration since the start time and records it in the appropriate histogram
 func (t *OtelMetrics) MeasureSince(start time.Time, keys ...string) {
-	if len(keys) != 2 || keys[0] != metricsNamespace {
+	if len(keys) != 2 || keys[0] != constants.MetricsNamespace {
 		return
 	}
 

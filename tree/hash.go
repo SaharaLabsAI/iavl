@@ -94,8 +94,11 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 		allLeaves = allLeaves[:0]
 		nodesToLoad = nodesToLoad[:0]
 
+		//nolint:staticcheck
 		nodeSlicePool.Put(allBranches)
+		//nolint:staticcheck
 		nodeSlicePool.Put(allLeaves)
+		//nolint:staticcheck
 		loadTaskPool.Put(nodesToLoad)
 	}()
 

@@ -36,7 +36,7 @@ type S2Encoder struct {
 	*s2.Writer
 }
 
-func (s2 *S2Encoder) Type() CompressType {
+func (s2 *S2Encoder) Type() Type {
 	return S2
 }
 
@@ -49,6 +49,6 @@ func (s2 *S2Decoder) Reset(r io.Reader) error {
 	return nil
 }
 
-func (s2 *S2Decoder) Type() CompressType {
+func (s2 *S2Decoder) Type() Type {
 	return S2
 }

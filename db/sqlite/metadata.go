@@ -9,16 +9,16 @@ import (
 	"github.com/eatonphil/gosqlite"
 )
 
-// SqliteKVStore is a generic KV store which uses sqlite as the backend and be used by applications to store and
+// KVStore is a generic KV store which uses sqlite as the backend and be used by applications to store and
 // retrieve generic key-value pairs, probably for metadata.
-type SqliteKVStore struct {
+type KVStore struct {
 	options Options
 	write   *gosqlite.Conn
 	read    *gosqlite.Conn
 	lock    *sync.Mutex
 }
 
-func NewSqliteKVStore(opts Options) (kv *SqliteKVStore, err error) {
+func NewSqliteKVStore(opts Options) (kv *KVStore, err error) {
 	if opts.Path == "" {
 		return nil, errors.New("path cannot be empty")
 	}
@@ -27,7 +27,7 @@ func NewSqliteKVStore(opts Options) (kv *SqliteKVStore, err error) {
 	}
 
 	pageSize := os.Getpagesize()
-	kv = &SqliteKVStore{options: opts, lock: &sync.Mutex{}}
+	kv = &KVStore{options: opts, lock: &sync.Mutex{}}
 	kv.write, err = gosqlite.Open(fmt.Sprintf(
 		"file:%s?_journal_mode=WAL&_synchronous=OFF&&_wal_autocheckpoint=%d", opts.Path, pageSize/opts.WalSize),
 		gosqlite.OPEN_READWRITE|gosqlite.OPEN_CREATE|gosqlite.OPEN_NOMUTEX)
@@ -48,7 +48,7 @@ func NewSqliteKVStore(opts Options) (kv *SqliteKVStore, err error) {
 	return kv, nil
 }
 
-func (kv *SqliteKVStore) Set(key []byte, value []byte) error {
+func (kv *KVStore) Set(key []byte, value []byte) error {
 	kv.lock.Lock()
 	defer kv.lock.Unlock()
 	if err := kv.write.Exec("INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)", key, value); err != nil {
@@ -57,7 +57,7 @@ func (kv *SqliteKVStore) Set(key []byte, value []byte) error {
 	return nil
 }
 
-func (kv *SqliteKVStore) Get(key []byte) (value []byte, err error) {
+func (kv *KVStore) Get(key []byte) (value []byte, err error) {
 	kv.lock.Lock()
 	defer kv.lock.Unlock()
 	stmt, err := kv.read.Prepare("SELECT value FROM kv WHERE key = ?")
@@ -82,7 +82,7 @@ func (kv *SqliteKVStore) Get(key []byte) (value []byte, err error) {
 	return value, nil
 }
 
-func (kv *SqliteKVStore) Delete(key []byte) error {
+func (kv *KVStore) Delete(key []byte) error {
 	kv.lock.Lock()
 	defer kv.lock.Unlock()
 	if err := kv.write.Exec("DELETE FROM kv WHERE key = ?", key); err != nil {

@@ -75,6 +75,8 @@ func TestDecodeBytes(t *testing.T) {
 				require.Equal(t, varintBytes, n)
 			} else {
 				require.NoError(t, err)
+				// no overflow because of max uint64
+				//nolint:gosec
 				require.Equal(t, uint64(n), uint64(varintBytes)+tc.lengthPrefix)
 				require.Equal(t, tc.bz[:tc.lengthPrefix], b)
 			}

@@ -52,7 +52,8 @@
   # git-hooks.hooks.shellcheck.enable = true;
   git-hooks.hooks = {
     gofmt.enable = true;
-    golangci-lint.enable = true;
+    # NOTE: gitui doesn't run under nix shell
+    # golangci-lint.enable = true;
   };
 
   # See full reference at https://devenv.sh/reference/options/

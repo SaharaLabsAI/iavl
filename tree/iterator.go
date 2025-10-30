@@ -348,6 +348,7 @@ func (i *LeafIterator) Close() error {
 	return i.err
 }
 
+//nolint:unparam
 func (i *LeafIterator) addNodeToStack(node *inode.Node, state int) {
 	i.stack = append(i.stack, iteratorStackEntry{node: node, state: state})
 }

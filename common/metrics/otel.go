@@ -10,6 +10,8 @@ import (
 	otelmetric "go.opentelemetry.io/otel/metric"
 )
 
+const metricsNamespace = "iavl2"
+
 // Verify TelemetryMetrics implements the Proxy interface
 var _ Proxy = &OtelMetrics{}
 
@@ -40,7 +42,7 @@ type OtelMetrics struct {
 }
 
 func NewOtelMetrics() *OtelMetrics {
-	meter := otel.Meter("iavl2")
+	meter := otel.Meter(metricsNamespace)
 
 	// Create instruments
 	poolOperations, err := meter.Int64Counter(
@@ -149,144 +151,132 @@ func NewOtelMetrics() *OtelMetrics {
 
 // IncrCounter increments the appropriate counter based on the metric key
 func (t *OtelMetrics) IncrCounter(val float32, keys ...string) {
-	if len(keys) != 2 {
+	if len(keys) != 2 || keys[0] != metricsNamespace {
 		return
 	}
 
 	ctx := context.Background()
-	namespace := keys[0]
 	metricName := keys[1]
 
-	switch namespace {
-	case "iavl2":
-		switch metricName {
-		// Pool operations
-		case "pool_get":
-			t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "get"),
-			))
-		case "pool_return":
-			t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "return"),
-			))
-		case "pool_evict":
-			t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "evict"),
-			))
-		case "pool_evict_miss":
-			t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "evict_miss"),
-			))
-		case "pool_fault":
-			t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "fault"),
-			))
+	switch metricName {
+	// Pool operations
+	case "pool_get":
+		t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "get"),
+		))
+	case "pool_return":
+		t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "return"),
+		))
+	case "pool_evict":
+		t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "evict"),
+		))
+	case "pool_evict_miss":
+		t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "evict_miss"),
+		))
+	case "pool_fault":
+		t.poolOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "fault"),
+		))
 
-		// Tree operations
-		case "tree_update":
-			t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "update"),
-			))
-		case "tree_new_node":
-			t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "new_node"),
-			))
-		case "tree_delete":
-			t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "delete"),
-			))
-		case "tree_hash":
-			t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "hash"),
-			))
+	// Tree operations
+	case "tree_update":
+		t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "update"),
+		))
+	case "tree_new_node":
+		t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "new_node"),
+		))
+	case "tree_delete":
+		t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "delete"),
+		))
+	case "tree_hash":
+		t.treeOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "hash"),
+		))
 
-		// Database operations
-		case "db_get_leaf":
-			t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "get_leaf"),
-			))
-		case "db_get_branch":
-			t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "get_branch"),
-			))
-		case "db_leaf_miss":
-			t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "leaf_miss"),
-			))
-		case "db_write_leaf":
-			t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "write_leaf"),
-			))
-		case "db_write_branch":
-			t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
-				attribute.String("operation", "write_branch"),
-			))
-		}
+	// Database operations
+	case "db_get_leaf":
+		t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "get_leaf"),
+		))
+	case "db_get_branch":
+		t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "get_branch"),
+		))
+	case "db_leaf_miss":
+		t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "leaf_miss"),
+		))
+	case "db_write_leaf":
+		t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "write_leaf"),
+		))
+	case "db_write_branch":
+		t.dbOperations.Add(ctx, int64(val), otelmetric.WithAttributes(
+			attribute.String("operation", "write_branch"),
+		))
 	}
 }
 
 // SetGauge sets the appropriate gauge metric
 func (t *OtelMetrics) SetGauge(val float32, keys ...string) {
-	if len(keys) != 2 {
+	if len(keys) != 2 || keys[0] != metricsNamespace {
 		return
 	}
 
 	ctx := context.Background()
-	namespace := keys[0]
 	metricName := keys[1]
 
-	switch namespace {
-	case "iavl2":
-		switch metricName {
-		case "working_size":
-			t.workingSize.Add(ctx, int64(val))
-		case "working_bytes":
-			t.workingBytes.Add(ctx, int64(val))
-		}
+	switch metricName {
+	case "working_size":
+		t.workingSize.Add(ctx, int64(val))
+	case "working_bytes":
+		t.workingBytes.Add(ctx, int64(val))
 	}
 }
 
 // MeasureSince measures the duration since the start time and records it in the appropriate histogram
 func (t *OtelMetrics) MeasureSince(start time.Time, keys ...string) {
-	if len(keys) != 2 {
+	if len(keys) != 2 || keys[0] != metricsNamespace {
 		return
 	}
 
 	ctx := context.Background()
 	duration := time.Since(start)
-	namespace := keys[0]
 	metricName := keys[1]
 
-	switch namespace {
-	case "iavl2":
-		switch metricName {
-		case "db_get":
-			t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
-				attribute.String("operation", "get"),
-			))
-			t.queryCount.Add(ctx, 1)
-			t.queryDuration.Record(ctx, duration.Seconds())
-		case "db_write":
-			t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
-				attribute.String("operation", "write"),
-			))
-			t.writeDuration.Record(ctx, duration.Seconds())
-		case "tree_set":
-			t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
-				attribute.String("operation", "tree_set"),
-			))
-		case "tree_has":
-			t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
-				attribute.String("operation", "tree_has"),
-			))
-		case "tree_get":
-			t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
-				attribute.String("operation", "tree_get"),
-			))
-		case "tree_batch_set_remove_deferred":
-			t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
-				attribute.String("operation", "batch_set_remove"),
-			))
-		}
+	switch metricName {
+	case "db_get":
+		t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
+			attribute.String("operation", "get"),
+		))
+		t.queryCount.Add(ctx, 1)
+		t.queryDuration.Record(ctx, duration.Seconds())
+	case "db_write":
+		t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
+			attribute.String("operation", "write"),
+		))
+		t.writeDuration.Record(ctx, duration.Seconds())
+	case "tree_set":
+		t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
+			attribute.String("operation", "tree_set"),
+		))
+	case "tree_has":
+		t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
+			attribute.String("operation", "tree_has"),
+		))
+	case "tree_get":
+		t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
+			attribute.String("operation", "tree_get"),
+		))
+	case "tree_batch_set_remove_deferred":
+		t.dbDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(
+			attribute.String("operation", "batch_set_remove"),
+		))
 	}
 }

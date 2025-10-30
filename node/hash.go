@@ -77,7 +77,7 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 
 		n = binary.PutUvarint(tmp[:], uint64(len(valueHash)))
 		buf.Write(tmp[:n])
-		buf.Write(valueHash[:])
+		buf.Write(valueHash)
 	} else {
 		// Safely handle the left node hash
 		var leftHash []byte
@@ -114,6 +114,8 @@ func (node *Node) writeHashBytesToBuffer(buf *bytes.Buffer) {
 }
 
 // writeHashBytes is kept for backward compatibility
+//
+//nolint:unused
 func (node *Node) writeHashBytes(w io.Writer) error {
 	var (
 		n   int
@@ -157,6 +159,7 @@ func (node *Node) writeHashBytes(w io.Writer) error {
 	return nil
 }
 
+//nolint:unused
 func encodeBytes(w io.Writer, bz []byte) error {
 	var buf [binary.MaxVarintLen64]byte
 	n := binary.PutUvarint(buf[:], uint64(len(bz)))

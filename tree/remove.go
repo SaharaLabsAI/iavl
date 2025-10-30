@@ -48,6 +48,8 @@ func (tree *Tree) Remove(key []byte) ([]byte, bool, error) {
 // - the node that replaces the orig. node after remove
 // - new leftmost leaf key for tree after successfully removing 'key' if changed.
 // - the removed value
+//
+//nolint:unparam
 func (tree *Tree) iterativeRemove(node *inode.Node, key []byte) (newSelf *inode.Node, newKey []byte, newValue []byte, removed bool, err error) {
 	// Define a struct to track our traversal state
 	type removeFrame struct {

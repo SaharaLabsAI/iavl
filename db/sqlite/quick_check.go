@@ -9,6 +9,7 @@ import (
 	"github.com/SaharaLabsAI/iavl/v2/common/constants"
 )
 
+//nolint:unused
 func runQuickCheck(sql *WriteConn) error {
 	start := time.Now()
 	defer func() {

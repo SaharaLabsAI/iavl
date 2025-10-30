@@ -68,6 +68,7 @@ func (s *BranchShards) reloadShardIDs(sql *WriteConn) error {
 	return nil
 }
 
+//nolint:unused
 func (s *BranchShards) isSharded(sql *WriteConn) (bool, error) {
 	q, err := sql.treeWrite.Prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'tree_%'")
 	if err != nil {
@@ -145,7 +146,9 @@ func (ss *BranchShardInsert) Exec(version int64, sequence int, bz []byte) error 
 	if !exists {
 		return fmt.Errorf("unexpected shard %d insert statment not found", shardID)
 	}
-	defer st.Reset()
+	defer func() {
+		_ = st.Reset()
+	}()
 
 	return st.Exec(version, sequence, bz)
 }
@@ -216,7 +219,9 @@ func (sd *BranchShardDelete) Exec(version int64, sequence int) error {
 	if !exists {
 		return fmt.Errorf("unexpected shard %d delete statment not found", shardID)
 	}
-	defer st.Reset()
+	defer func() {
+		_ = st.Reset()
+	}()
 
 	return st.Exec(version, sequence)
 }

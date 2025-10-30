@@ -141,13 +141,17 @@ func (c *ReadConn) Prepare(statement string, args ...any) (*gosqlite.Stmt, error
 }
 
 func (c *ReadConn) Exec(stmt string, args ...any) error {
-	defer c.Release()
+	defer func() {
+		_ = c.Release()
+	}()
 
 	return c.conn.Exec(stmt, args...)
 }
 
 func (c *ReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*inode.Node, error) {
-	defer c.Release()
+	defer func() {
+		_ = c.Release()
+	}()
 
 	if constants.IsLeafSeq(nodekey.Sequence()) {
 		return c.getLeaf(pool, nodekey)
@@ -157,7 +161,9 @@ func (c *ReadConn) GetNode(pool *nodepool.NodePool, nodekey inode.NodeKey) (*ino
 }
 
 func (c *ReadConn) GetValue(version int64, key []byte) ([]byte, error) {
-	defer c.Release()
+	defer func() {
+		_ = c.Release()
+	}()
 
 	if len(key) == 0 {
 		return nil, fmt.Errorf("get value with key length 0")
@@ -170,7 +176,9 @@ func (c *ReadConn) GetValue(version int64, key []byte) ([]byte, error) {
 			return nil, err
 		}
 	}
-	defer c.queryKV.Reset()
+	defer func() {
+		_ = c.queryKV.Reset()
+	}()
 
 	h := hashpool.Blake3Pool.Get().(hash.Hash)
 	defer hashpool.Blake3Pool.Put(h)
@@ -251,7 +259,9 @@ func (c *ReadConn) getLeaf(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*ino
 			return nil, err
 		}
 	}
-	defer c.queryLeaf.Reset()
+	defer func() {
+		_ = c.queryLeaf.Reset()
+	}()
 
 	if err = c.queryLeaf.Bind(nodeKey.Version(), int(nodeKey.Sequence())); err != nil {
 		return nil, err
@@ -293,7 +303,9 @@ func (c *ReadConn) getNode(pool *nodepool.NodePool, nodeKey inode.NodeKey) (*ino
 	if err != nil {
 		return nil, err
 	}
-	defer q.Reset()
+	defer func() {
+		_ = q.Reset()
+	}()
 
 	hasRow, err := q.Step()
 	if !hasRow {

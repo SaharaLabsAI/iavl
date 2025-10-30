@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// nolint
 func RootCommand() (*cobra.Command, error) {
 	cmd := &cobra.Command{
 		Use:   "iavl",

@@ -8,6 +8,7 @@ import (
 	inode "github.com/SaharaLabsAI/iavl/v2/node"
 )
 
+//nolint:unused
 func writeDotGraph(root *inode.Node, lastGraph *dot.Graph) *dot.Graph {
 	graph := dot.NewGraph(dot.Directed)
 

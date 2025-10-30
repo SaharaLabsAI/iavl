@@ -29,14 +29,14 @@ type ReadConnPool struct {
 }
 
 // NOTE: This pool is primary used for rpc query
-func NewReadConnPool(opts *Options, MaxPoolSize int) (*ReadConnPool, error) {
-	if MaxPoolSize <= 0 {
-		MaxPoolSize = defaultMaxPoolSize
+func NewReadConnPool(opts *Options, maxPoolSize int) (*ReadConnPool, error) {
+	if maxPoolSize <= 0 {
+		maxPoolSize = defaultMaxPoolSize
 	}
 
 	pool := &ReadConnPool{
 		opts:    opts,
-		conns:   NewConnPool(opts, MaxPoolSize, opts.Logger),
+		conns:   NewConnPool(opts, maxPoolSize, opts.Logger),
 		iters:   NewIterPool(opts.Logger),
 		metrics: opts.Metrics,
 		logger:  opts.Logger,
@@ -155,10 +155,10 @@ type ConnPool struct {
 	mu sync.Mutex
 }
 
-func NewConnPool(opts *Options, MaxPoolSize int, logger logger.Logger) *ConnPool {
+func NewConnPool(opts *Options, maxPoolSize int, logger logger.Logger) *ConnPool {
 	return &ConnPool{
 		opts:   opts,
-		conns:  make([]*ReadConn, 0, MaxPoolSize),
+		conns:  make([]*ReadConn, 0, maxPoolSize),
 		logger: logger,
 	}
 }
@@ -253,7 +253,7 @@ func (i *IterPool) closeKVIterstor(idx int) error {
 
 	conn, exists := i.kvItrConns[idx]
 	if exists {
-		conn.Release()
+		_ = conn.Release()
 		delete(i.kvItrConns, idx)
 	}
 
@@ -272,7 +272,9 @@ func (i *IterPool) closeHangingIterators() error {
 		}
 
 		if i.kvItrConns[idx] != nil {
-			i.kvItrConns[idx].Release()
+			if err := i.kvItrConns[idx].Release(); err != nil {
+				i.logger.Error(fmt.Sprintf("failed to release connection for iterator idx=%d: %v", idx, err))
+			}
 			delete(i.kvItrConns, idx)
 		}
 

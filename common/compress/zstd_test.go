@@ -31,7 +31,7 @@ func TestZstdCompress(t *testing.T) {
 	d := ZstdDecoderPool.Get().(Decoder)
 	defer ZstdDecoderPool.Put(d)
 
-	d.Reset(&delta)
+	require.NoError(t, d.Reset(&delta))
 	_, err = io.Copy(&out, d)
 	require.NoError(t, err)
 

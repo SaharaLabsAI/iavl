@@ -31,7 +31,7 @@ func TestS2Compress(t *testing.T) {
 	d := S2DecoderPool.Get().(Decoder)
 	defer S2DecoderPool.Put(d)
 
-	d.Reset(&delta)
+	require.NoError(t, d.Reset(&delta))
 	_, err = io.Copy(&out, d)
 	require.NoError(t, err)
 

@@ -50,7 +50,10 @@
 
   # https://devenv.sh/git-hooks/
   # git-hooks.hooks.shellcheck.enable = true;
-  git-hooks.hooks.gofmt.enable = true;
+  git-hooks.hooks = {
+    gofmt.enable = true;
+    golangci-lint.enable = true;
+  };
 
   # See full reference at https://devenv.sh/reference/options/
 }

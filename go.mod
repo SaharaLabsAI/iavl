@@ -1,6 +1,6 @@
 module github.com/SaharaLabsAI/iavl/v2
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/aybabtme/uniplot v0.0.0-20151203143629-039c559e5e7e

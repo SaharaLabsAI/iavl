@@ -24,5 +24,6 @@ jobs:
           # integer overflow).
       - name: test & coverage report creation
         run: |
+          go env -w GOTOOLCHAIN=go1.25.0+auto
           go test -p 1 --failfast ./... -mod=readonly -timeout 30m -race -short -coverprofile=coverage.txt -covermode=atomic
           go test -p 1 --failfast ./... -mod=readonly -timeout 15m

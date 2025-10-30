@@ -108,7 +108,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 		depth int8
 	}
 
-	var toProcess = []nodeWithDepth{{node: node, depth: depth}}
+	toProcess := []nodeWithDepth{{node: node, depth: depth}}
 	nextTreeVersion := tree.version.Load() + 1
 
 	// Phase 1: Collect nodes and identify what needs loading (match original logic)

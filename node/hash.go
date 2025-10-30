@@ -12,9 +12,7 @@ import (
 	hashpool "github.com/SaharaLabsAI/iavl/v2/common/pool/hash"
 )
 
-var (
-	EmptyHash = sha256.New().Sum(nil)
-)
+var EmptyHash = sha256.New().Sum(nil)
 
 // Computes the hash of the node without computing its descendants. Must be
 // called on nodes which have descendant node hashes already computed.

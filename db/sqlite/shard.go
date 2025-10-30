@@ -8,8 +8,10 @@ import (
 	"github.com/eatonphil/gosqlite"
 )
 
-const defaultStartShardID = int64(1)
-const defaultTreeShardSize = 500_000
+const (
+	defaultStartShardID  = int64(1)
+	defaultTreeShardSize = 500_000
+)
 
 func ToShardID(version int64) int64 {
 	if version <= 0 {
@@ -104,7 +106,7 @@ type BranchShardInsert struct {
 func PrepareBranchShardInsert(sql *WriteConn, shards *BranchShards) (*BranchShardInsert, error) {
 	stmts := make(map[int64]*gosqlite.Stmt)
 
-	for shardID, _ := range shards.shardIDs {
+	for shardID := range shards.shardIDs {
 		st, err := sql.preapreBranchShardInsertStatement(shardID)
 		if err != nil {
 			return nil, err

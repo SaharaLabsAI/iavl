@@ -13,13 +13,15 @@ import (
 	"github.com/SaharaLabsAI/iavl/v2/common/metrics"
 )
 
-const defaultSQLitePath = "/tmp/iavl2"
-const defaultMaxPoolSize = 1000
-const defaultPageSize = 4096 // 4K
-const defaultThreadsCount = 8
-const defaultAnalysisLimit = 2000
-const defaultIncrementalVacuum = 50
-const defaultWriteCacheSize = -256 * 1024 // 256M
+const (
+	defaultSQLitePath        = "/tmp/iavl2"
+	defaultMaxPoolSize       = 1000
+	defaultPageSize          = 4096 // 4K
+	defaultThreadsCount      = 8
+	defaultAnalysisLimit     = 2000
+	defaultIncrementalVacuum = 50
+	defaultWriteCacheSize    = -256 * 1024 // 256M
+)
 
 // journal mode is database wide, only need to set once on write connections
 const defaultJournalMode = "WAL"

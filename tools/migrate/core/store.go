@@ -106,7 +106,7 @@ func NewReadonlyStore(dbPath string) (*ReadonlyStore, error) {
 var ErrStoreNotFound = errors.New("store not found")
 
 func (rs *ReadonlyStore) LatestTree(storeKey string) (db.DB, *iavl.MutableTree, error) {
-	//since := time.Now()
+	// since := time.Now()
 
 	prefix := fmt.Sprintf("s/k:%s/", storeKey)
 	prefixDb := db.NewPrefixDB(rs.DB, []byte(prefix))
@@ -123,7 +123,7 @@ func (rs *ReadonlyStore) LatestTree(storeKey string) (db.DB, *iavl.MutableTree, 
 		return nil, nil, err
 	}
 
-	//log.Info().Msgf("loaded tree in %s", time.Since(since))
+	// log.Info().Msgf("loaded tree in %s", time.Since(since))
 
 	return prefixDb, tree, nil
 }

@@ -116,7 +116,6 @@ func latestVersionCommand() *cobra.Command {
 				return errors.New("version must be set")
 			}
 			if set {
-
 			} else {
 				bz, err := kv.Get([]byte(latestVersionKey))
 				if err != nil {
@@ -299,10 +298,8 @@ func allCommand() *cobra.Command {
 			for _, storeKey := range storeKeys {
 				wg.Add(1)
 				go func(sk string) {
-					var (
-						count int64
-						//since = time.Now()
-					)
+					var count int64
+					// since = time.Now()
 
 					<-lock
 

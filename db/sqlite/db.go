@@ -52,7 +52,7 @@ func NewDB(opts Options) (*DB, error) {
 	}
 
 	if !api.IsFileExistent(opts.Path) {
-		err = os.MkdirAll(opts.Path, 0755)
+		err = os.MkdirAll(opts.Path, 0o755)
 		if err != nil {
 			return nil, err
 		}

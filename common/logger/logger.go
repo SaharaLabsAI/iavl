@@ -51,12 +51,15 @@ type testLogger struct{}
 func (l *testLogger) Info(msg string, keys ...any) {
 	slog.Info(msg, keys...)
 }
+
 func (l *testLogger) Warn(msg string, keys ...any) {
 	slog.Warn(msg, keys...)
 }
+
 func (l *testLogger) Error(msg string, keys ...any) {
 	slog.Error(msg, keys...)
 }
+
 func (l *testLogger) Debug(msg string, keys ...any) {
 	slog.Debug(msg, keys...)
 }

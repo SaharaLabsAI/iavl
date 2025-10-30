@@ -17,6 +17,8 @@
   # languages.rust.enable = true;
   languages.go.enable = true;
 
+  devcontainer.enable = true;
+
   # https://devenv.sh/processes/
   # processes.dev.exec = "${lib.getExe pkgs.watchexec} -n -- ls -la";
 
@@ -48,6 +50,7 @@
 
   # https://devenv.sh/git-hooks/
   # git-hooks.hooks.shellcheck.enable = true;
+  git-hooks.hooks.gofmt.enable = true;
 
   # See full reference at https://devenv.sh/reference/options/
 }

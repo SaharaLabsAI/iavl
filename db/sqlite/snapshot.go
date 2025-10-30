@@ -188,6 +188,7 @@ func IngestSnapshot(conn *gosqlite.Conn, prefix string, version int64, nextFn fu
 		node.SetSource(inode.ManualNode)
 		node.SetKey(snapshotNode.Key)
 		node.SetSubTreeHeight(snapshotNode.Height)
+		//nolint:gosec
 		node.SetNodeKey(inode.NewNodeKey(snapshotNode.Version, uint32(ordinal)))
 
 		// Leaf
@@ -283,10 +284,8 @@ func (sql *DB) WriteSnapshot(
 		return nil, err
 	}
 
-	var (
-		root *inode.Node
-		// uniqueVersions map[int64]struct{}
-	)
+	var root *inode.Node
+	// uniqueVersions map[int64]struct{}
 	switch opts.TraverseOrder {
 	case constants.PostOrder:
 		root, _, err = snap.restorePostOrderStep(nextFn)
@@ -612,6 +611,7 @@ func (snap *sqliteSnapshot) restorePostOrderStep(nextFn func() (*SnapshotNode, e
 		node.SetSource(inode.ManualNode)
 		node.SetKey(snapshotNode.Key)
 		node.SetSubTreeHeight(snapshotNode.Height)
+		//nolint:gosec
 		node.SetNodeKey(inode.NewNodeKey(snapshotNode.Version, uint32(ordinal)))
 
 		stackSize := len(stack)
@@ -675,6 +675,7 @@ func (snap *sqliteSnapshot) restorePreOrderStep(nextFn func() (*SnapshotNode, er
 		node.SetSource(inode.ManualNode)
 		node.SetKey(snapshotNode.Key)
 		node.SetSubTreeHeight(snapshotNode.Height)
+		//nolint:gosec
 		node.SetNodeKey(inode.NewNodeKey(snapshotNode.Version, uint32(ordinal)))
 
 		if node.IsLeaf() {
@@ -800,6 +801,7 @@ func (sqlImport *sqliteImport) queryStepPreOrder() (node *inode.Node, err error)
 	if err != nil {
 		return nil, err
 	}
+	//nolint:gosec
 	nodeKey := inode.NewNodeKey(int64(version), uint32(seq))
 	node, err = inode.Decode(sqlImport.pool, nodeKey, bz)
 	if err != nil {
@@ -852,6 +854,7 @@ func (sqlImport *sqliteImport) queryStepPostOrder() (node *inode.Node, err error
 	if err != nil {
 		return nil, err
 	}
+	//nolint:gosec
 	nodeKey := inode.NewNodeKey(int64(version), uint32(seq))
 	node, err = inode.Decode(sqlImport.pool, nodeKey, bz)
 	if err != nil {

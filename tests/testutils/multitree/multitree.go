@@ -249,7 +249,7 @@ func (mt *MultiTree) SnapshotConcurrently() error {
 // it used in testing. App chains should use the store hashing code referenced above instead.
 func (mt *MultiTree) Hash() []byte {
 	var (
-		storeKeys []string
+		storeKeys = make([]string, 0, len(mt.Trees))
 		hashes    []byte
 	)
 	for k := range mt.Trees {

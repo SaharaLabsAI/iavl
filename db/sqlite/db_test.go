@@ -60,7 +60,9 @@ func TestBuildSqlite(t *testing.T) {
 		}
 
 		node := version1.GetNode()
+		//nolint:gosec
 		lnk := inode.NewNodeKey(1, uint32(count+1))
+		//nolint:gosec
 		rnk := inode.NewNodeKey(1, uint32(count+2))
 		n := &inode.Node{}
 		n.SetSource(inode.ManualNode)

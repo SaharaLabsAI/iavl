@@ -250,7 +250,7 @@ func Test_ImmutableTree_GetWithIndex(t *testing.T) {
 	require.Equal(t, int64(3), index)
 
 	// Test non-existing key
-	index, val, err = imTree.GetWithIndex([]byte("nonexistent"))
+	_, val, err = imTree.GetWithIndex([]byte("nonexistent"))
 	require.NoError(t, err)
 	require.Nil(t, val)
 }

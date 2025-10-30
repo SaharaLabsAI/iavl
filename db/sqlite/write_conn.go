@@ -195,6 +195,7 @@ func (conn *WriteConn) createTableIfNotExists() error {
 	}
 	if !hasRow {
 		pageSize := getPageSize()
+		//nolint:gosec
 		conn.logger.Info(fmt.Sprintf("setting page size to %s", humanize.Bytes(uint64(pageSize))))
 		err = conn.treeWrite.Exec(fmt.Sprintf("PRAGMA page_size=%d; VACUUM;", pageSize))
 		if err != nil {

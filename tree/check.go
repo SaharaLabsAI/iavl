@@ -34,7 +34,8 @@ func (tree *Tree) DetectWrongBranchHashes(start, end int64) ([]*WrongVersionKey,
 		version := binary.BigEndian.Uint64(iter.Value())
 
 		keys = append(keys, &WrongVersionKey{
-			key:     iter.Key(),
+			key: iter.Key(),
+			//nolint:gosec
 			version: int64(version),
 		})
 	}
@@ -96,9 +97,11 @@ type WrongBranchHashIterator struct {
 
 func (i *WrongBranchHashIterator) Domain() (start []byte, end []byte) {
 	s := make([]byte, 8)
+	//nolint:gosec
 	binary.BigEndian.PutUint64(s, uint64(i.start))
 
 	e := make([]byte, 8)
+	//nolint:gosec
 	binary.BigEndian.PutUint64(e, uint64(i.end))
 
 	return s, e
@@ -148,6 +151,7 @@ func (i *WrongBranchHashIterator) Next() {
 			return
 		}
 
+		//nolint:gosec
 		nodeKey := inode.NewNodeKey(version, uint32(sequence))
 		node, err := inode.Decode(i.nodePool, nodeKey, nodeBz)
 		if err != nil {
@@ -190,6 +194,7 @@ func (i *WrongBranchHashIterator) Next() {
 			i.key = node.LeftNode().Key()
 
 			b := make([]byte, 8)
+			//nolint:gosec
 			binary.BigEndian.PutUint64(b, uint64(node.Version()))
 			i.value = b
 

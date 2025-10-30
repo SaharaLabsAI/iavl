@@ -60,6 +60,7 @@ func Decode(pool Pool, nodeKey NodeKey, buf []byte) (*Node, error) {
 	buf = buf[n:]
 
 	node := pool.Get()
+	//nolint:gosec
 	node.subtreeHeight = int8(height)
 	node.nodeKey = nodeKey
 	node.size = size
@@ -244,6 +245,7 @@ func decodeNodeKey(bz []byte) (*NodeKey, int, error) {
 	version := binary.BigEndian.Uint64(bz[n : n+8])
 	sequence := binary.BigEndian.Uint32(bz[n+8 : end])
 
+	//nolint:gosec
 	key := NewNodeKey(int64(version), sequence)
 
 	return &key, end, nil

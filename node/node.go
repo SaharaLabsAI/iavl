@@ -133,6 +133,7 @@ func (node *Node) LeftNodeKey() NodeKey {
 }
 
 func (node *Node) varSize() uint64 {
+	//nolint:gosec
 	return uint64(len(node.key) + len(node.value))
 }
 

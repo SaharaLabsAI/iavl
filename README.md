@@ -14,6 +14,15 @@ Use Go modules:
 go get github.com/SaharaLabsAI/iavl/v2
 ```
 
+### Development with Nix (devenv)
+This repository includes a Nix-based development environment via [devenv](https://devenv.sh/).
+
+- Enter the dev shell from the repo root:
+  - `devenv shell`
+- Inside the shell you have Go and Git available (from `devenv.nix`). Typical commands:
+  - `go test ./...`
+  - `go build ./...`
+
 ### Documentation (in this repo)
 - CHANGELOG: see `CHANGELOG.md`
 - Contributing guide: see `CONTRIBUTING.md`

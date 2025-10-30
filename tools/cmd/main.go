@@ -8,13 +8,16 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	root, err := RootCommand()
 	if err != nil {
-		os.Exit(1)
+		return 1
 	}
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
@@ -23,18 +26,35 @@ func main() {
 		cancel()
 	}()
 
+	exitChan := make(chan int, 1)
+
 	go func() {
 		select {
 		case <-signalChan:
 			cancel()
 		case <-ctx.Done():
 		}
+
 		<-signalChan
-		os.Exit(2)
+		select {
+		case exitChan <- 2:
+		default:
+		}
 	}()
 
+	var execErr bool
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Printf("Error: %s\n", err.Error())
-		os.Exit(1)
+		execErr = true
+	}
+
+	select {
+	case code := <-exitChan:
+		return code
+	default:
+		if execErr {
+			return 1
+		}
+		return 0
 	}
 }

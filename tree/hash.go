@@ -169,18 +169,20 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 	}
 
 	// Phase 2: Always attempt parallel loading if there are nodes to load
-	if len(nodesToLoad) > 0 {
+	loadCount := len(nodesToLoad)
+	if loadCount > 0 {
 		// Use fewer connections for smaller workloads to reduce overhead
 		var maxConnections int
-		if len(nodesToLoad) < 50 {
+		switch {
+		case loadCount < 50:
 			maxConnections = 2
-		} else if len(nodesToLoad) < 200 {
+		case loadCount < 200:
 			maxConnections = 3
-		} else {
+		default:
 			maxConnections = 4
 		}
 
-		actualConnections := min(maxConnections, tree.optimizedWorkerCount(len(nodesToLoad)))
+		actualConnections := min(maxConnections, tree.optimizedWorkerCount(loadCount))
 		actualConnections = max(1, actualConnections) // Ensure at least 1
 
 		connPool := make([]db.ReadConn, 0, actualConnections)
@@ -277,7 +279,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 			var leafWg sync.WaitGroup
 			for i := 0; i < leafWorkers; i++ {
 				leafWg.Add(1)
-				go func() {
+				leafWg.Go(func() {
 					defer leafWg.Done()
 
 					h := hashpool.Sha256Pool.Get().(hash.Hash)
@@ -291,7 +293,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 						buf.Reset()
 						leaf.HashWith(h, buf)
 					}
-				}()
+				})
 			}
 			leafWg.Wait()
 		} else {
@@ -348,7 +350,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 				var branchWg sync.WaitGroup
 				for i := 0; i < branchWorkers; i++ {
 					branchWg.Add(1)
-					go func() {
+					branchWg.Go(func() {
 						defer branchWg.Done()
 
 						h := hashpool.Sha256Pool.Get().(hash.Hash)
@@ -373,7 +375,7 @@ func (tree *Tree) deepHashParallel(node *inode.Node, depth int8) {
 							buf.Reset()
 							branch.HashWith(h, buf)
 						}
-					}()
+					})
 				}
 				branchWg.Wait()
 			} else {
@@ -672,18 +674,20 @@ func (tree *Tree) estimateCapacity(rootNode *inode.Node) (int, int) {
 func (tree *Tree) optimizedWorkerCount(workload int) int {
 	cpuCount := runtime.NumCPU()
 
-	if workload <= 1 {
+	switch {
+	case workload <= 1:
 		return 1
-	} else if workload <= 5 {
+	case workload <= 5:
 		return min(2, cpuCount)
-	} else if workload <= 20 {
+	case workload <= 20:
 		return min(3, cpuCount)
-	} else if workload <= 100 {
+	case workload <= 100:
 		return min(4, cpuCount)
-	} else if workload <= 1000 {
+	case workload <= 1000:
 		return min(8, cpuCount)
+	default:
+		return min(16, cpuCount*2) // For large workloads
 	}
-	return min(16, cpuCount*2) // For large workloads
 }
 
 type nodeLoadTask struct {

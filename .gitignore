@@ -24,5 +24,7 @@ devenv.local.nix
 # direnv
 .direnv
 
+.cache/
+
 # pre-commit
 .pre-commit-config.yaml
